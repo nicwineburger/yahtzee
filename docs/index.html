@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Yacht Dice Solver</title>
+<meta name="description" content="Optimal-play advisor for Yacht Dice (Clubhouse Games: 51 Worldwide Classics rules). Enter your scorecard and roll; get the best keep or box.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='4' y='4' width='92' height='92' rx='20' fill='%231d3557'/%3E%3Ccircle cx='30' cy='30' r='11' fill='white'/%3E%3Ccircle cx='70' cy='30' r='11' fill='white'/%3E%3Ccircle cx='50' cy='50' r='11' fill='white'/%3E%3Ccircle cx='30' cy='70' r='11' fill='white'/%3E%3Ccircle cx='70' cy='70' r='11' fill='white'/%3E%3C/svg%3E">
+</head>
+<body>
+<header>
+  <div>
+    <h1>Yacht Dice Solver</h1>
+    <p class="sub">Clubhouse Games rules · optimal play</p>
+  </div>
+  <div class="ev-chip" id="evChip" title="Expected points still to come from this position under optimal play">
+    <span id="evValue">–</span>
+    <span class="ev-label">exp. pts left</span>
+  </div>
+</header>
+
+<main>
+  <section class="card" id="advice" aria-live="polite">
+    <div id="adviceBody" class="advice-empty">Loading solver…</div>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Your roll</h2>
+      <div class="seg" id="rollSeg" role="radiogroup" aria-label="Which roll is this">
+        <button data-roll="1" class="on">1st roll</button>
+        <button data-roll="2">2nd</button>
+        <button data-roll="3">3rd</button>
+      </div>
+    </div>
+    <div class="dice-row" id="diceRow"></div>
+    <div class="pad" id="dicePad">
+      <button data-face="1"></button><button data-face="2"></button>
+      <button data-face="3"></button><button data-face="4"></button>
+      <button data-face="5"></button><button data-face="6"></button>
+      <button class="pad-clear" id="diceClear" aria-label="Clear dice">✕</button>
+    </div>
+    <p class="hint">Tap faces to enter your five dice · tap a die to remove it</p>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Scorecard</h2>
+      <button class="text-btn" id="resetBtn">New game</button>
+    </div>
+    <div class="board">
+      <div class="col" id="upperCol"></div>
+      <div class="col" id="lowerCol"></div>
+    </div>
+    <div class="bonus-line" id="bonusLine"></div>
+    <p class="hint">Tap an upper box to set how many you scored — lower boxes just toggle
+    filled (their points don’t change strategy).</p>
+  </section>
+
+  <footer>
+    Exact expected-score-optimal play, precomputed by backward induction over
+    all 262,144 game states ·
+    <a href="https://github.com/nicwineburger/yahtzee">source</a>
+  </footer>
+</main>
+
+<div class="sheet-backdrop" id="sheetBackdrop" hidden>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
