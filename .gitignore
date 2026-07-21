@@ -44,6 +44,10 @@ animations/**/cache/
 !/math/data/turn_kernels/
 !/math/data/turn_kernels/**
 
+# Keep the solved Clubhouse Yacht Dice value/bonus tables (1.2 MB; lets
+# yacht_clubhouse_numbers.py run without redoing the ~1 min backward pass)
+!/math/data/yacht_clubhouse_solution.npz
+
 # Keep only the initial final outcome distribution
 !/math/data/final_outcome_dists/
 /math/data/final_outcome_dists/*
