@@ -22,14 +22,22 @@ or extra-Yacht bonuses.
   sub-multisets, reroll outcome distributions) in the browser and computes
   exact stage A/B/C decisions against the value table. No approximations:
   the advice is the same as the Python solver's policy.
-- `index.html` / `style.css` / `app.js` — the UI. Only the upper-section
-  *scores* are asked for (lower-box points don't affect future strategy, so
-  lower boxes are just filled/open toggles). Every listed option is
-  playable: tapping the recommended (or any alternative) keep carries those
-  dice into the next roll, and tapping any box choice scores it and starts
-  the next turn. The expected-points chip opens a chart of expected points
-  left vs boxes filled for the current game. State (including that
-  trajectory) persists in localStorage.
+- `index.html` / `style.css` / `app.js` — the UI, with two modes:
+  - **Advisor**: enter a real game's state by hand. Only the upper-section
+    *scores* are asked for (lower-box points don't affect future strategy,
+    so lower boxes are just filled/open toggles). Every listed option is
+    playable: tapping the recommended (or any alternative) keep carries
+    those dice into the next roll, and tapping any box choice scores it and
+    starts the next turn.
+  - **Play**: the app runs a full game — it rolls the dice (tap to hold
+    between rolls, 3 rolls a turn), previews what every open box would
+    score, banks the box you tap, tracks upper bonus and totals, and
+    supports 1–4 players pass-and-play from one device. An advice toggle
+    overlays the optimal move ("Hold these for me" / "Score it") without
+    playing for you.
+  The expected-points chip opens a chart of expected points left vs boxes
+  filled (one line per player in play mode). All state persists in
+  localStorage.
 
 No build step, no dependencies.
 

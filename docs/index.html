@@ -34,10 +34,16 @@
 </header>
 
 <main>
+  <div class="seg mode-seg" id="modeSeg" role="radiogroup" aria-label="App mode">
+    <button data-mode="advisor" class="on">Advisor</button>
+    <button data-mode="play">Play</button>
+  </div>
+
   <section class="card" id="advice" aria-live="polite">
     <div id="adviceBody" class="advice-empty">Loading solver…</div>
   </section>
 
+  <div id="advisorView" class="view">
   <section class="card">
     <div class="section-head">
       <h2>Your roll</h2>
@@ -70,6 +76,33 @@
     <p class="hint">Tap an upper box to set how many you scored — lower boxes just toggle
     filled (their points don’t change strategy).</p>
   </section>
+  </div>
+
+  <div id="playView" class="view" hidden>
+  <section class="card">
+    <div class="section-head">
+      <h2 id="playTurnInfo">Play</h2>
+      <button class="text-btn" id="playNewBtn">New game</button>
+    </div>
+    <div class="standings" id="standings"></div>
+    <div class="dice-row" id="playDiceRow"></div>
+    <button class="apply-btn roll-btn" id="rollBtn">Roll</button>
+    <p class="hint" id="playHint"></p>
+    <label class="advice-switch"><input type="checkbox" id="adviceToggle">
+      Show optimal-play advice</label>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2 id="playCardTitle">Scorecard</h2>
+    </div>
+    <div class="board">
+      <div class="col" id="playUpperCol"></div>
+      <div class="col" id="playLowerCol"></div>
+    </div>
+    <div class="bonus-line" id="playBonusLine"></div>
+  </section>
+  </div>
 
   <footer>
     Exact expected-score-optimal play, precomputed by backward induction over
