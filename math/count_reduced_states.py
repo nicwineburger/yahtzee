@@ -1,6 +1,6 @@
 """Count reachable ReducedGameState positions (the SECOND-reduction format).
 
-This is the "second reduction" from scene 05: a position is identified by
+This is the "second reduction": a position is identified by
 (filled_mask, upper_total capped at 63, yahtzee_eligible bit) -- top score only
 matters below 63, the bottom-section total is dropped, and the Yahtzee count
 collapses to a single eligibility bit. That is `ReducedGameState`
@@ -10,10 +10,10 @@ It COUNTS what's already on disk -- one row per ReducedGameState in the
 `data/state_properties/level_NN/<mask>.npz` shards (each shard's `upper_total`
 array has one entry per state). No unpickling, no game math recomputed.
 
-Reports, with the same transform as Blank A (minus terminal, x756):
+Reports (minus terminal, x756):
   * states per level (0..13)
   * non-terminal total (levels 0..12)
-  * non-terminal total x 756                   <- the scene-05 Blank C figure
+  * non-terminal total x 756                   <- in-turn "positions"
 
 Run from the math/ project dir with its venv:
     cd math

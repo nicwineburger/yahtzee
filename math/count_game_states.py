@@ -1,6 +1,6 @@
 """Count reachable GameState positions (the FIRST-reduction format) per level.
 
-This is the "first reduction" from scene 05: a position is identified by
+This is the "first reduction": a position is identified by
 (filled_mask, upper_total, lower_total, num_yahtzees) -- i.e. which boxes are
 filled, the top-section score, the bottom-section score, and the number of
 Yahtzees. That is exactly `GameState` (math/game_state.py), enumerated by
@@ -11,10 +11,10 @@ recompute any game math. It handles either on-disk layout:
   * sharded per-mask:  data/state_levels/level_NN/<13-bit-mask>.pkl
   * one-file-per-level: data/state_levels/level_N.pkl
 
-Reports, matching scene 01's arc (385,647,100,272 -> minus terminal -> x756):
+Reports (385,647,100,272 board positions -> minus terminal -> x756):
   * states per level (0..13)
   * non-terminal total (levels 0..12)         <- game not yet over
-  * non-terminal total x 756                   <- the scene-05 Blank A figure
+  * non-terminal total x 756                   <- in-turn "positions"
 
 Run from the math/ project dir with its venv, e.g.:
     cd math

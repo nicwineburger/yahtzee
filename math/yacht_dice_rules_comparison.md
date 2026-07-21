@@ -1,14 +1,15 @@
-# Yacht Dice (Clubhouse Games, Switch) vs this video's Yahtzee rules
+# Yacht Dice (Clubhouse Games, Switch) vs standard Yahtzee rules
 
 How the "Yacht Dice" game in Nintendo's *Clubhouse Games: 51 Worldwide
-Classics* differs from the standard Yahtzee rules this repo's solver uses, and
-what happens to the video's headline numbers when the solver is re-run under
-the Yacht Dice rules.
+Classics* differs from the standard Yahtzee rules this repo's main solver
+uses, and what happens to the headline numbers when the solver is re-run
+under the Yacht Dice rules.
 
 Code: `yacht_clubhouse.py` (solver — reuses the repo's dice/keep/reroll
 machinery, swaps the category tables and state space) and
-`yacht_clubhouse_numbers.py` (prints every number below). The solved
-value/bonus tables are committed at `data/yacht_clubhouse_solution.npz`.
+`yacht_clubhouse_numbers.py` (prints every Yacht-rules number below;
+`yahtzee_baseline_numbers.py` prints the standard-rules counterparts). The
+solved value/bonus tables are committed at `data/yacht_clubhouse_solution.npz`.
 
 ---
 
@@ -46,9 +47,9 @@ Sources: [GameFAQs Yacht Dice guide](https://gamefaqs.gamespot.com/switch/286602
 [325-point perfect-score runs](https://www.speedrun.com/chg51ce/runs/zqgjr41m)
 ([video](https://www.youtube.com/watch?v=fJwRlyqUOJQ)).
 
-## 2. Rule differences vs this repo's rules
+## 2. Rule differences vs standard Yahtzee
 
-| | This video (Yahtzee) | Clubhouse Yacht Dice |
+| | Standard Yahtzee | Clubhouse Yacht Dice |
 |---|---|---|
 | Rounds / boxes | 13 | **12** |
 | Three-of-a-Kind | sum of all dice | **doesn't exist** |
@@ -64,8 +65,9 @@ Sources: [GameFAQs Yacht Dice guide](https://gamefaqs.gamespot.com/switch/286602
 | Max score | 1575 | **325** |
 
 Everything about the dice themselves (252 distinct rolls, 462 keeps, reroll
-outcome distributions) is unchanged, so scenes 1–3's combinatorics (6⁵ = 7776,
-252 outcomes, 1/1296 yacht-in-one-roll, etc.) apply to both games verbatim.
+outcome distributions) is unchanged, so the raw dice combinatorics
+(6⁵ = 7776 ordered rolls, 252 outcomes, 1/1296 five-of-a-kind in one roll,
+etc.) apply to both games verbatim.
 
 ## 3. Method + validation
 
@@ -78,14 +80,14 @@ Checks:
 
 - Single-open-box states with identical scoring reproduce the standard-rules
   numbers exactly (Ones mean count 2.1065, 4-Kind 27.74% / EV 5.611, Yacht
-  4.60%, Choice 23.333 — matching `scene06_last_turn_numbers.py`).
+  4.60%, Choice 23.333 — matching `yahtzee_baseline_numbers.py`).
 - 100k-game Monte Carlo replay of the solved policy: mean 191.64 ± 0.12 vs
   DP 191.77; P(bonus) 69.2% vs 69.0%. (20k-game run with a different seed:
   191.91 ± 0.27.)
 
-## 4. The numbers, old rules vs new
+## 4. The numbers, standard rules vs Yacht Dice
 
-### Headline (scenes 04/05/10/12)
+### Headline
 
 | | Yahtzee (13 turns) | Yacht Dice (12 turns) |
 |---|---|---|
@@ -98,22 +100,22 @@ Checks:
 | Final-score median | 248 | ≈193 (MC) |
 | q05 / q95 | 180 / 388 | ≈128 / ≈259 (MC) |
 
-The "perfect average is 254.6" talking point becomes **191.8** — scores are
-~25% lower and much tighter (no 100-point Yahtzee-bonus right tail: sd drops
-by a third, and the q95 falls from +133 above the median to +66).
+"Par" for optimal play drops from 254.6 to **191.8** — scores are ~25% lower
+and much tighter (no 100-point Yahtzee-bonus right tail: sd drops by a third,
+and the q95 falls from +133 above the median to +66).
 
-### Scene 09 — top bonus
+### Top bonus
 
-The bonus story *strengthens* slightly: despite one fewer turn, optimal play
-gets the bonus a touch MORE often (69.0% vs 68.1%, turn-0 bonus EV 24.16 vs
+The bonus *strengthens* slightly: despite one fewer turn, optimal play gets
+the bonus a touch MORE often (69.0% vs 68.1%, turn-0 bonus EV 24.16 vs
 23.84), because the Yacht lower section is worth so much less that the upper
 section (and its 35) carries more of the game. The "what one upper fill does
 to your bonus outlook" table keeps its exact shape; blanking an upper box
 early now hurts *more* (0-fill of Threes on turn 1: bonus EV 2.80 vs 4.34
 under Yahtzee rules; three-of-the-number fills stay near ~24 in both):
 
-Yacht Dice analog of the scene-09 table (35 × P(bonus) after a turn-1 fill of
-`count` dice of `number`; Yahtzee-rules values in `scene09_top_bonus_numbers.py`):
+Yacht Dice values (35 × P(bonus) after a turn-1 fill of `count` dice of
+`number`; standard-rules table in `yahtzee_baseline_numbers.py`):
 
 ```
 count |       1       2       3       4       5       6
@@ -126,7 +128,7 @@ count |       1       2       3       4       5       6
     5 |   27.29   29.75   31.19   32.37   33.35   34.07
 ```
 
-### Scene 10 — ranking of optimal first-turn outcomes
+### Ranking of optimal first-turn outcomes
 
 Same overall picture at the top (Yacht 50 → big upper fills), but the middle
 reshuffles substantially (40 distinct outcomes now vs 32, because sum-scored
@@ -141,12 +143,12 @@ Full Houses fan out into per-sum rows):
 | 3-Kind rows (ranks 6, 9–11) | present | gone (box doesn't exist) |
 | Worst optimal outcome | Chance 19 (exp. 238.96, −15.6) | Choice 19 (exp. 177.65, −14.1) |
 
-The video's "a first-roll large straight is the 4th-best thing that can happen
-to you" type of claim degrades: in Yacht Dice a 28-point Full House beats the
-30-point B. Straight, and the S. Straight (15) drops from "solid outcome" to
-near the bottom, next to the dump-box rows.
+Under Yahtzee rules a first-roll large straight is the 4th-best thing that
+can happen to you; in Yacht Dice a 28-point Full House beats the 30-point
+B. Straight, and the S. Straight (15) drops from "solid outcome" to near the
+bottom, next to the dump-box rows.
 
-### Scene 12 beat a — committing 12 points on turn 1
+### Committing 12 points on turn 1
 
 Same qualitative escalation (four 3s great … two 6s terrible), and the deltas
 move in Yacht's favor for the good cases:
@@ -161,11 +163,10 @@ move in Yacht's favor for the good cases:
 
 The four-3s play is *more* clearly right under Yacht rules (bigger bonus
 leverage), and burning 4-Kind on 12 stings less (its replacement value is
-lower without the 3-Kind/joker ecosystem around it). The punchline — 12 in
-the Threes beats 12 in the Sixes by ~25 points of expectation — survives
-almost unchanged (25.2 vs 26.9).
+lower without the 3-Kind/joker ecosystem around it). Either way, 12 in the
+Threes beats 12 in the Sixes by ~25 points of expectation (25.2 vs 26.9).
 
-### Scene 06 — each box alone on the last turn
+### Each box alone on the last turn
 
 Upper boxes, Choice/Chance, 4-Kind and Yacht/Yahtzee are *identical* (same
 scoring, same dice). The boxes whose rules changed:
@@ -180,8 +181,9 @@ scoring, same dice). The boxes whose rules changed:
 The straight success-probability drops (61.60→61.54, 26.53→26.11) are purely
 the loss of the joker rule: under Yahtzee rules a rolled five-of-a-kind counts
 as a straight once the Yahtzee box is filled; in Yacht Dice it's a miss.
-The '3 ones vs 2 sixes' 4-Kind teaching beat (51.8% vs 22.8% success, 4.2 vs
-6.2 EV) carries over exactly — 4-Kind scoring is unchanged.
+The "keep three 1s vs keep two 6s" Four-of-a-Kind comparison (51.8% vs 22.8%
+success; keeping the pair of 6s still wins on EV) carries over exactly —
+4-Kind scoring is unchanged.
 
 ### First-roll keeps (empty card)
 
@@ -190,22 +192,13 @@ Spot-checked stage-A decisions transfer unchanged for ordinary rolls —
 `12345→keep all` are optimal under both rule sets. The differences live in
 the category *placements* and in valuations, not in everyday keep intuition.
 
-### Not recomputable here
-
-Scene 12 beat c (the "ahead by one simplified point ⇒ 97% they win the real
-game too" matchup) reads `data/reduced_point_dists/`, which isn't committed,
-and its Yacht analog would need the whole reduced-point pipeline ported; the
-4/2/1 simplified-point system itself is Yahtzee-specific (it counts Yahtzees
-and 100-point bonuses that don't exist in Yacht Dice), so that beat has no
-direct Yacht translation.
-
 ## 5. Conclusions that survive vs shift
 
 **Survive:**
-- All pure dice combinatorics (scenes 1–3) — identical game mechanics.
-- The upper-bonus strategy story (scene 9): if anything stronger — 69% bonus
-  rate, and early upper blanks are costlier.
-- The scene-12 "where you park 12 points" escalation and rough magnitudes.
+- All pure dice combinatorics — identical game mechanics.
+- The upper-bonus strategy story: if anything stronger — 69% bonus rate, and
+  early upper blanks are costlier.
+- The "where you park 12 points" escalation and rough magnitudes.
 - Everyday keep decisions (first-roll keeps spot-checked identical).
 - Chance/Choice ≈ 23.3 as the last-turn dump-box yardstick.
 
@@ -216,7 +209,7 @@ direct Yacht translation.
   outcome" to near the dump rows; B. Straight is outranked by a good sum-scored
   Full House.
 - Full House becomes a sum-maximizing box (chase 66655, not any 3+2).
-- Everything about Yahtzee bonuses/jokers (scene 5's 100-point chains, joker
+- Everything about Yahtzee bonuses/jokers (100-point bonus chains, joker
   straights) simply has no counterpart.
-- Three-of-a-Kind material (its 71% last-turn success, first-turn 3-Kind rows)
-  has no counterpart either.
+- Three-of-a-Kind (71% last-turn success, its first-turn outcome rows) has no
+  counterpart either.
