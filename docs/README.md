@@ -24,7 +24,12 @@ or extra-Yacht bonuses.
   the advice is the same as the Python solver's policy.
 - `index.html` / `style.css` / `app.js` — the UI. Only the upper-section
   *scores* are asked for (lower-box points don't affect future strategy, so
-  lower boxes are just filled/open toggles). State persists in localStorage.
+  lower boxes are just filled/open toggles). Every listed option is
+  playable: tapping the recommended (or any alternative) keep carries those
+  dice into the next roll, and tapping any box choice scores it and starts
+  the next turn. The expected-points chip opens a chart of expected points
+  left vs boxes filled for the current game. State (including that
+  trajectory) persists in localStorage.
 
 No build step, no dependencies.
 

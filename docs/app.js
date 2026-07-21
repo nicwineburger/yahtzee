@@ -11,6 +11,7 @@ const state = {
   lowerFilled: Array(6).fill(false),  // categories 6..11
   dice: [],                           // entered faces, up to 5
   roll: 1,                            // 1 | 2 | 3
+  history: {},                        // boxes-filled count -> expected points left
   ready: false,
 };
 
@@ -119,12 +120,28 @@ function miniDiceHTML(values) {
   return `<span class="mini-dice">` + values.map((f) => `<span>${dieSVG(f, 17)}</span>`).join("") + `</span>`;
 }
 
+function countBits(m) {
+  let n = 0;
+  for (let c = 0; c < 12; c++) if (m & (1 << c)) n++;
+  return n;
+}
+
+function recordHistory(m, u) {
+  const filled = countBits(m);
+  state.history[filled] = E.stateValue(m, u);
+  // A manual card edit can reduce the filled count — drop stale later turns.
+  for (const k of Object.keys(state.history)) {
+    if (Number(k) > filled) delete state.history[k];
+  }
+}
+
 function renderAdvice() {
   const body = $("adviceBody");
   const m = mask(), u = cappedUpper();
 
   const evChip = $("evValue");
   evChip.textContent = state.ready ? fmt(E.stateValue(m, u)) : "–";
+  if (state.ready) recordHistory(m, u);
 
   if (!state.ready) { body.className = "advice-empty"; body.textContent = "Loading solver…"; return; }
 
@@ -153,13 +170,17 @@ function renderAdvice() {
           <span class="pts">${best.pts} pts</span>${best.crossed ? " · locks the +35 bonus" : ""}</p>
         <p class="advice-sub">Expected final haul from here: ${fmt(best.ev + 0)} pts</p>
         <button class="apply-btn" id="applyBtn">Apply &amp; next turn</button>
-        ${alts.length ? `<details class="more"><summary>Other options</summary>
-          <ul class="alts">${alts.map((a) =>
-            `<li><span class="what">${a.name} · ${a.pts} pts</span>
-             <span class="delta">−${fmt(best.ev - a.ev)}</span></li>`).join("")}
+        ${alts.length ? `<details class="more"><summary>Other options — tap to score instead</summary>
+          <ul class="alts">${alts.map((a, i) =>
+            `<li><button class="alt-btn" data-alt="${i}">
+               <span class="what">${a.name} · ${a.pts} pts</span>
+               <span class="delta">−${fmt(best.ev - a.ev)}</span></button></li>`).join("")}
           </ul></details>` : ""}
       </div>`;
     $("applyBtn").onclick = () => applyScore(best);
+    body.querySelectorAll(".alt-btn").forEach((b) => {
+      b.onclick = () => applyScore(alts[Number(b.dataset.alt)]);
+    });
     return;
   }
 
@@ -174,21 +195,78 @@ function renderAdvice() {
       <p class="advice-title">${title}</p>
       ${adviceDiceHTML(best.keepVec)}
       <p class="advice-sub">Expected final haul from here: ${fmt(best.ev)} pts</p>
-      ${alts.length ? `<details class="more"><summary>Other keeps</summary>
-        <ul class="alts">${alts.map((a) =>
-          `<li><span class="what">${miniDiceHTML(a.keepValues)}</span>
-           <span class="delta">−${fmt(best.ev - a.ev)}</span></li>`).join("")}
+      <button class="apply-btn" id="keepBtn">Keep these &amp; roll again</button>
+      ${alts.length ? `<details class="more"><summary>Other keeps — tap to keep instead</summary>
+        <ul class="alts">${alts.map((a, i) =>
+          `<li><button class="alt-btn" data-alt="${i}">
+             <span class="what">${miniDiceHTML(a.keepValues)}</span>
+             <span class="delta">−${fmt(best.ev - a.ev)}</span></button></li>`).join("")}
         </ul></details>` : ""}
     </div>`;
+  $("keepBtn").onclick = () => applyKeep(best.keepValues);
+  body.querySelectorAll(".alt-btn").forEach((b) => {
+    b.onclick = () => applyKeep(alts[Number(b.dataset.alt)].keepValues);
+  });
 }
 
-function applyScore(best) {
-  const c = best.cat;
-  if (c < 6) state.upperScores[c] = best.pts;
+function applyScore(choice) {
+  const c = choice.cat;
+  if (c < 6) state.upperScores[c] = choice.pts;
   else state.lowerFilled[c - 6] = true;
   state.dice = [];
   state.roll = 1;
   render();
+}
+
+function applyKeep(keepValues) {
+  state.dice = [...keepValues];
+  state.roll = Math.min(state.roll + 1, 3);
+  render();
+}
+
+// ── Expected-points trajectory chart ────────────────────────────────────────
+function chartSVG() {
+  const entries = Object.entries(state.history)
+    .map(([t, v]) => [Number(t), v])
+    .sort((a, b) => a[0] - b[0]);
+  const W = 340, H = 220, L = 38, R = 12, T = 16, B = 30;
+  const yMax = Math.max(50, Math.ceil(Math.max(...entries.map((e) => e[1]), 1) / 50) * 50);
+  const x = (t) => L + (t / 12) * (W - L - R);
+  const y = (v) => T + (1 - v / yMax) * (H - T - B);
+
+  let grid = "";
+  for (let v = 0; v <= yMax; v += 50) {
+    grid += `<line x1="${L}" y1="${y(v)}" x2="${W - R}" y2="${y(v)}" class="c-grid"/>` +
+            `<text x="${L - 6}" y="${y(v) + 3.5}" class="c-lbl" text-anchor="end">${v}</text>`;
+  }
+  for (let t = 0; t <= 12; t += 2) {
+    grid += `<text x="${x(t)}" y="${H - B + 16}" class="c-lbl" text-anchor="middle">${t}</text>`;
+  }
+
+  const pts = entries.map(([t, v]) => `${x(t)},${y(v)}`).join(" ");
+  const line = entries.length > 1 ? `<polyline points="${pts}" class="c-line"/>` : "";
+  const dots = entries.map(([t, v], i) =>
+    `<circle cx="${x(t)}" cy="${y(v)}" r="${i === entries.length - 1 ? 5 : 3.5}"
+       class="c-dot${i === entries.length - 1 ? " last" : ""}"><title>${t} filled: ${v.toFixed(1)} pts left</title></circle>`
+  ).join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"
+    aria-label="Expected points left by number of boxes filled">
+    ${grid}${line}${dots}
+    <text x="${(L + W - R) / 2}" y="${H - 2}" class="c-lbl" text-anchor="middle">boxes filled</text>
+  </svg>`;
+}
+
+function openChartSheet() {
+  if (!state.ready) return;
+  const sheet = $("sheet");
+  const n = Object.keys(state.history).length;
+  sheet.innerHTML = `<h3>Expected points left, by boxes filled</h3>
+    ${chartSVG()}
+    <p class="hint">${n > 1
+      ? "Each dot is your expected remaining score at that point in the game. An optimal game starts at 191.8 with no boxes filled and glides to 0 as the card fills — a shallow step means that turn banked more than it cost."
+      : "Fill some boxes and the trajectory of your game will build up here."}</p>`;
+  $("sheetBackdrop").hidden = false;
 }
 
 // ── Upper-box picker sheet ──────────────────────────────────────────────────
@@ -237,15 +315,18 @@ $("resetBtn").onclick = () => {
   state.lowerFilled = Array(6).fill(false);
   state.dice = [];
   state.roll = 1;
+  state.history = {};
   render();
 };
+
+$("evChip").onclick = openChartSheet;
 
 // ── Persistence ─────────────────────────────────────────────────────────────
 function save() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       upperScores: state.upperScores, lowerFilled: state.lowerFilled,
-      dice: state.dice, roll: state.roll,
+      dice: state.dice, roll: state.roll, history: state.history,
     }));
   } catch (e) { /* private mode etc. — fine */ }
 }
@@ -257,6 +338,10 @@ function load() {
     if (Array.isArray(s.lowerFilled) && s.lowerFilled.length === 6) state.lowerFilled = s.lowerFilled;
     if (Array.isArray(s.dice)) state.dice = s.dice.filter((f) => f >= 1 && f <= 6).slice(0, 5);
     if ([1, 2, 3].includes(s.roll)) state.roll = s.roll;
+    if (s.history && typeof s.history === "object" && !Array.isArray(s.history)) {
+      state.history = Object.fromEntries(Object.entries(s.history)
+        .filter(([t, v]) => Number(t) >= 0 && Number(t) <= 12 && typeof v === "number"));
+    }
   } catch (e) { /* corrupted storage — start fresh */ }
 }
 
