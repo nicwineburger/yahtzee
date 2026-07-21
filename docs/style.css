@@ -1,0 +1,200 @@
+/* Yacht Dice Solver — minimal, mobile-first. */
+:root {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --ink: #1a1d24;
+  --muted: #6b7280;
+  --line: #e3e5ea;
+  --accent: #1d3557;
+  --accent-ink: #ffffff;
+  --good: #157f3d;
+  --keep: #eef4ff;
+  --keep-line: #1d3557;
+  --danger: #b3261e;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161b;
+    --card: #1e2128;
+    --ink: #e8eaee;
+    --muted: #9aa1ab;
+    --line: #2c3038;
+    --accent: #7ea4d6;
+    --accent-ink: #10141c;
+    --good: #57bd7f;
+    --keep: #23304a;
+    --keep-line: #7ea4d6;
+    --danger: #ef8a84;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0 auto;
+  max-width: 560px;
+  padding: 12px 12px calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+  touch-action: manipulation;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 4px 12px;
+}
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.sub { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.ev-chip {
+  text-align: right;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  min-width: 86px;
+}
+.ev-chip span { display: block; }
+#evValue { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ev-label { font-size: 10.5px; color: var(--muted); }
+
+main { display: grid; gap: 12px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em;
+     color: var(--muted); margin: 0; font-weight: 600; }
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; gap: 8px;
+}
+.hint { font-size: 12px; color: var(--muted); margin: 10px 2px 0; }
+.text-btn {
+  background: none; border: none; color: var(--accent);
+  font-size: 13.5px; font-weight: 600; cursor: pointer; padding: 4px 6px;
+}
+
+/* ── Advice ── */
+#advice { border-left: 4px solid var(--accent); }
+.advice-empty { color: var(--muted); font-size: 14.5px; padding: 4px 2px; }
+.advice-main { display: flex; flex-direction: column; gap: 10px; }
+.advice-title { font-size: 17px; font-weight: 700; margin: 0; }
+.advice-title .pts { color: var(--good); }
+.advice-sub { font-size: 13px; color: var(--muted); margin: -6px 0 0; }
+.advice-dice { display: flex; gap: 8px; }
+.alts { margin: 4px 0 0; padding: 0; list-style: none; font-size: 13.5px; }
+.alts li {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 5px 2px; border-top: 1px solid var(--line);
+  color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.alts .what { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.alts .mini-dice { display: flex; gap: 3px; }
+.delta { white-space: nowrap; }
+details.more summary {
+  cursor: pointer; font-size: 13px; color: var(--accent);
+  margin-top: 6px; user-select: none;
+}
+.apply-btn {
+  margin-top: 2px;
+  background: var(--accent); color: var(--accent-ink);
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 600; padding: 10px 14px; cursor: pointer;
+}
+.apply-btn:active { opacity: 0.85; }
+
+/* ── Dice entry ── */
+.seg { display: flex; background: var(--bg); border-radius: 10px; padding: 3px; }
+.seg button {
+  border: none; background: none; color: var(--muted);
+  font-size: 13px; font-weight: 600; padding: 5px 10px;
+  border-radius: 8px; cursor: pointer;
+}
+.seg button.on { background: var(--card); color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+
+.dice-row { display: flex; gap: 8px; justify-content: center; min-height: 56px; }
+.die {
+  width: 52px; height: 52px; padding: 0; border-radius: 12px;
+  border: 1.5px solid var(--line); background: var(--card); cursor: pointer;
+}
+.die svg { display: block; width: 100%; height: 100%; }
+.die.empty { border-style: dashed; }
+.die.kept { border-color: var(--keep-line); background: var(--keep);
+  border-width: 2.5px; }
+.die.dim { opacity: 0.38; }
+.die-slot { width: 52px; height: 52px; border-radius: 12px;
+  border: 1.5px dashed var(--line); }
+.pip { fill: var(--ink); }
+
+.pad { display: flex; gap: 6px; margin-top: 12px; }
+.pad button {
+  flex: 1; height: 46px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); cursor: pointer;
+  padding: 6px;
+}
+.pad button svg { display: block; width: 100%; height: 100%; margin: auto; }
+.pad button:active { background: var(--keep); }
+.pad-clear { color: var(--muted); font-size: 16px; flex: 0.7 !important; }
+
+/* ── Scorecard ── */
+.board { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.box {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  width: 100%;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); cursor: pointer;
+  padding: 8px 10px; font-size: 14px; color: var(--ink);
+  min-height: 40px;
+}
+.box .name { font-weight: 600; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.box .val { font-variant-numeric: tabular-nums; color: var(--muted);
+  white-space: nowrap; }
+.box.filled { background: var(--card); border-color: var(--accent);
+  border-width: 1.5px; }
+.box.filled .val { color: var(--ink); font-weight: 700; }
+.col { display: grid; gap: 6px; align-content: start; }
+.bonus-line { margin-top: 10px; font-size: 13.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.bonus-line b { color: var(--ink); }
+.bonus-line .earned { color: var(--good); font-weight: 700; }
+
+/* ── Bottom sheet (upper-box picker) ── */
+.sheet-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 10;
+}
+.sheet-backdrop[hidden] { display: none; }
+.sheet {
+  background: var(--card); width: 100%; max-width: 560px;
+  border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.sheet h3 { margin: 0 0 12px; font-size: 16px; }
+.sheet .opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sheet .opts button {
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  border-radius: 10px; padding: 12px 4px; font-size: 15px; cursor: pointer;
+}
+.sheet .opts button .n { font-weight: 700; display: block; }
+.sheet .opts button .s { font-size: 11.5px; color: var(--muted); }
+.sheet .opts button.open-opt { color: var(--danger); }
+
+footer {
+  font-size: 11.5px; color: var(--muted); text-align: center;
+  padding: 6px 16px 0;
+}
+footer a { color: var(--accent); }
+
+@media (min-width: 480px) {
+  body { padding-top: 20px; }
+  .die, .die-slot { width: 58px; height: 58px; }
+}
