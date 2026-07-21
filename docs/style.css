@@ -11,10 +11,14 @@
   --keep: #eef4ff;
   --keep-line: #1d3557;
   --danger: #b3261e;
+  --die-line: #aab0ba;
   --radius: 14px;
+  color-scheme: light;
 }
+/* Dark palette. Applied twice: for OS preference (unless the user forced
+   light) and for an explicit dark choice from the theme toggle. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14161b;
     --card: #1e2128;
     --ink: #e8eaee;
@@ -26,7 +30,24 @@
     --keep: #23304a;
     --keep-line: #7ea4d6;
     --danger: #ef8a84;
+    --die-line: #99a2b0;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #14161b;
+  --card: #1e2128;
+  --ink: #e8eaee;
+  --muted: #9aa1ab;
+  --line: #2c3038;
+  --accent: #7ea4d6;
+  --accent-ink: #10141c;
+  --good: #57bd7f;
+  --keep: #23304a;
+  --keep-line: #7ea4d6;
+  --danger: #ef8a84;
+  --die-line: #99a2b0;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -63,6 +84,13 @@ h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
   cursor: pointer;
 }
 .ev-chip:active { background: var(--keep); }
+.head-right { display: flex; align-items: center; gap: 8px; }
+.theme-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  font-size: 17px; line-height: 1; cursor: pointer; flex: none;
+}
+.theme-btn:active { background: var(--keep); color: var(--ink); }
 .ev-chip span { display: block; }
 #evValue { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ev-label { font-size: 10.5px; color: var(--muted); }
@@ -142,6 +170,7 @@ details.more summary {
 .die-slot { width: 52px; height: 52px; border-radius: 12px;
   border: 1.5px dashed var(--line); }
 .pip { fill: var(--ink); }
+.die-frame { fill: none; stroke: var(--die-line); stroke-width: 7; }
 
 .pad { display: flex; gap: 6px; margin-top: 12px; }
 .pad button {

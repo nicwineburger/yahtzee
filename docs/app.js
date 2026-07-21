@@ -34,11 +34,15 @@ const PIPS = {
   5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
   6: [[0, 0], [0, 1], [0, 2], [2, 0], [2, 1], [2, 2]],
 };
-function dieSVG(face, size = 24) {
+function dieSVG(face, size = 24, framed = false) {
   const dots = PIPS[face]
     .map(([x, y]) => `<circle class="pip" cx="${27 + x * 23}" cy="${27 + y * 23}" r="8.5"/>`)
     .join("");
-  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-label="${face}">${dots}</svg>`;
+  // Small standalone dice (alternative keeps, box-score picker) get an
+  // explicit outline so they read as dice against any background.
+  const frame = framed
+    ? `<rect class="die-frame" x="5" y="5" width="90" height="90" rx="22"/>` : "";
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-label="${face}">${frame}${dots}</svg>`;
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
@@ -117,7 +121,7 @@ function adviceDiceHTML(keepVec) {
 
 function miniDiceHTML(values) {
   if (!values.length) return `<span class="what">keep nothing</span>`;
-  return `<span class="mini-dice">` + values.map((f) => `<span>${dieSVG(f, 17)}</span>`).join("") + `</span>`;
+  return `<span class="mini-dice">` + values.map((f) => `<span>${dieSVG(f, 18, true)}</span>`).join("") + `</span>`;
 }
 
 function countBits(m) {
@@ -277,7 +281,7 @@ function openUpperSheet(c) {
   opts.push(`<button class="open-opt" data-v="open">not filled</button>`);
   for (let k = 0; k <= 5; k++) {
     opts.push(`<button data-v="${k * face}">
-      <span class="n">${k * face}</span><span class="s">${k}× ${dieSVG(face, 13)}</span></button>`);
+      <span class="n">${k * face}</span><span class="s">${k}× ${dieSVG(face, 14, true)}</span></button>`);
   }
   sheet.innerHTML = `<h3>${E.CATEGORY_NAMES[c]} — banked score</h3>
     <div class="opts">${opts.join("")}</div>`;
@@ -320,6 +324,37 @@ $("resetBtn").onclick = () => {
 };
 
 $("evChip").onclick = openChartSheet;
+
+// ── Theme toggle: auto (follow system) -> dark -> light ─────────────────────
+const THEME_KEY = "yacht-solver-theme";
+const THEME_META = {
+  auto: { icon: "◐", label: "follows your system" },
+  dark: { icon: "☾", label: "dark" },
+  light: { icon: "☀", label: "light" },
+};
+
+function currentTheme() {
+  const t = document.documentElement.dataset.theme;
+  return t === "dark" || t === "light" ? t : "auto";
+}
+
+function applyTheme(t) {
+  if (t === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  try {
+    if (t === "auto") localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, t);
+  } catch (e) { /* private mode — theme just won't persist */ }
+  const btn = $("themeBtn");
+  btn.textContent = THEME_META[t].icon;
+  btn.title = `Theme: ${THEME_META[t].label} — tap to change`;
+}
+
+$("themeBtn").onclick = () => {
+  const order = ["auto", "dark", "light"];
+  applyTheme(order[(order.indexOf(currentTheme()) + 1) % order.length]);
+};
+applyTheme(currentTheme());
 
 // ── Persistence ─────────────────────────────────────────────────────────────
 function save() {
