@@ -58,7 +58,11 @@ h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
   border-radius: var(--radius);
   padding: 6px 12px;
   min-width: 86px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
+.ev-chip:active { background: var(--keep); }
 .ev-chip span { display: block; }
 #evValue { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ev-label { font-size: 10.5px; color: var(--muted); }
@@ -91,11 +95,15 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em;
 .advice-sub { font-size: 13px; color: var(--muted); margin: -6px 0 0; }
 .advice-dice { display: flex; gap: 8px; }
 .alts { margin: 4px 0 0; padding: 0; list-style: none; font-size: 13.5px; }
-.alts li {
+.alts li { border-top: 1px solid var(--line); }
+.alt-btn {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  padding: 5px 2px; border-top: 1px solid var(--line);
-  color: var(--muted); font-variant-numeric: tabular-nums;
+  width: 100%; padding: 8px 4px;
+  background: none; border: none; border-radius: 8px; cursor: pointer;
+  color: var(--muted); font: inherit; font-size: 13.5px;
+  font-variant-numeric: tabular-nums; text-align: left;
 }
+.alt-btn:active { background: var(--keep); color: var(--ink); }
 .alts .what { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .alts .mini-dice { display: flex; gap: 3px; }
 .delta { white-space: nowrap; }
@@ -187,6 +195,15 @@ details.more summary {
 .sheet .opts button .n { font-weight: 700; display: block; }
 .sheet .opts button .s { font-size: 11.5px; color: var(--muted); }
 .sheet .opts button.open-opt { color: var(--danger); }
+
+/* ── Trajectory chart ── */
+.chart { display: block; width: 100%; height: auto; margin: 4px 0; }
+.c-grid { stroke: var(--line); stroke-width: 1; }
+.c-lbl { fill: var(--muted); font-size: 10px; }
+.c-line { fill: none; stroke: var(--accent); stroke-width: 2.5;
+  stroke-linejoin: round; stroke-linecap: round; }
+.c-dot { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
+.c-dot.last { fill: var(--accent); }
 
 footer {
   font-size: 11.5px; color: var(--muted); text-align: center;
