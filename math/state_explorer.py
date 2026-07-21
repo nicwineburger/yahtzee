@@ -1,9 +1,8 @@
 """Yahtzee state-explorer helpers (shared source of truth).
 
-Extracted verbatim from ``math/notebooks/state_explorer.ipynb`` so both the
-notebook and other tooling (e.g. the animation cache generator in
-``animations/assets/dp_data.py``) call the SAME query helpers over the solved
-game rather than reinventing the math.
+Extracted verbatim from ``math/notebooks/state_explorer.ipynb`` so the
+notebook and other tooling (e.g. ``yahtzee_baseline_numbers.py``) call the
+SAME query helpers over the solved game rather than reinventing the math.
 
 Contract (same as the notebook's Cell 1): the CALLER must ensure the current
 working directory is the ``math/`` project dir and that ``math/`` is on

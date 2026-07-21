@@ -1,9 +1,10 @@
-"""Clubhouse "Yacht Dice" — the video's headline numbers, recomputed.
+"""Clubhouse "Yacht Dice" — headline numbers under the Clubhouse rule set.
 
-Prints the Yacht-rules analogs of the standard-rules provenance scripts
-(scene06/09/10/12 numbers), for the side-by-side in
-yacht_dice_rules_comparison.md.  Reads data/yacht_clubhouse_solution.npz
-(written by `yacht_clubhouse.py`; regenerated here if missing).
+Prints the Yacht-rules counterparts of everything
+``yahtzee_baseline_numbers.py`` reports for standard Yahtzee, for the
+side-by-side in yacht_dice_rules_comparison.md.  Reads
+data/yacht_clubhouse_solution.npz (written by `yacht_clubhouse.py`;
+regenerated here if missing).
 
 Run from math/ with the ROOT venv:
     ../.venv/bin/python yacht_clubhouse_numbers.py
@@ -48,7 +49,7 @@ def report():
     v_empty = V[0][0]
 
     print("=" * 72)
-    print("HEADLINE (scene 04/10/12 analog)")
+    print("HEADLINE")
     print("=" * 72)
     print(f"V(empty)  whole-game expected score = {v_empty:.4f}")
     print(f"P(upper bonus) under optimal play   = {P[0][0]:.4%}")
@@ -56,7 +57,7 @@ def report():
 
     print()
     print("=" * 72)
-    print("SCENE 09 ANALOG — top-bonus EV after a turn-1 upper fill")
+    print("TOP-BONUS EV after a turn-1 upper fill")
     print("(rows = # of that number scored on turn 1; columns = the number)")
     print("=" * 72)
     print(f"{'count':>5} | " + " ".join(f"{n:>7}" for n in range(1, 7)))
@@ -71,8 +72,8 @@ def report():
 
     print()
     print("=" * 72)
-    print("SCENE 10 ANALOG — optimal first-turn outcomes, ranked by expected")
-    print("final total (points banked + V of resulting state)")
+    print("OPTIMAL FIRST-TURN OUTCOMES ranked by expected final total")
+    print("(points banked + V of resulting state)")
     print("=" * 72)
     pol0 = yc.policy_for_mask(0, V)
     groups = {}
@@ -98,7 +99,7 @@ def report():
 
     print()
     print("=" * 72)
-    print("SCENE 12 BEAT-A ANALOG — expected TOTAL after committing 12 on turn 1")
+    print("EXPECTED TOTAL after committing 12 points on turn 1")
     print("=" * 72)
     for label, cat, upper in [
         ("12 in 3 box (four 3s)", Y_THREES, 12),
@@ -113,7 +114,7 @@ def report():
 
     print()
     print("=" * 72)
-    print("SCENE 06 ANALOG — each box as the ONLY open box on the last turn")
+    print("EACH BOX as the ONLY open box on the last turn")
     print("(upper_total=35, so no bonus interaction; EV-optimal policy)")
     print("=" * 72)
     st_top = FULL & ~(1 << Y_ONES)

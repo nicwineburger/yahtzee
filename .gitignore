@@ -6,24 +6,8 @@
 .venv/
 venv/
 
-# Manim / generated media (never commit renders)
-media/
-**/media/
-*.mp4
-*.mov
-*.wav
-*.mp3
-
-# Manim snapshot cache (build artifact, 50+ MB pickles). Scoped to the
-# animations tree so it does NOT touch the kept solver .pkl files in math/data/.
-animations/**/cache/
-
 # OS / editor junk
 .DS_Store
-
-# Claude config symlinks (machine-local; recreated from dotclaude by /sync-videos)
-.claude/commands
-.claude/settings.local.json
 
 # Ignore generated math data by default
 /math/data/*
@@ -54,10 +38,6 @@ animations/**/cache/
 !/math/data/final_outcome_dists/level_00/
 /math/data/final_outcome_dists/level_00/*
 !/math/data/final_outcome_dists/level_00/0000000000000.npz
-
-# Optional: keep old value-iteration pickle outputs only if you still use them.
-# !/math/data/values/
-# !/math/data/values/**
 
 # Ignore notebook checkpoints
 **/.ipynb_checkpoints/
