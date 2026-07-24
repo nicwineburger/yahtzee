@@ -36,6 +36,7 @@ authenticated, jq present — failing with an actionable one-liner
 | `check-setup.sh [--fix]` | doctor; prints `ok:`/`warn:`/`FAIL:`; exit 4 on any FAIL; `--fix` installs hooks |
 | `install-hooks.sh [--uninstall]` | per-clone: `core.hooksPath=.githooks`, `commit.template=.gitmessage` |
 | `lint-commit.sh [--explain] --message\|--file\|--range` | conventional-commit lint; silent on pass; `--explain` prints `TYPE=/SCOPE=/BREAKING=` |
+| `normalize-subject.sh --message "<subject>"` | repairs a proposed subject (whitespace, trailing punctuation, over-length → word-boundary truncation) and re-lints it; **stdout = clean subject**, repairs noted on stderr; exit 1 if structurally unrepairable |
 | `branch.sh <type> <issue#\|-> <slug…>` | topic branch `<type>/<N>-<slug>` off fresh `origin/main`; prints name |
 | `issue-fetch.sh <N> [--json]` | issue + all comments as model-ready markdown |
 | `pr-create.sh --title T [--body-file F] [--issue N] [--draft]` | lints title, pushes, opens PR; idempotent; **last stdout line = PR#** |
@@ -60,6 +61,13 @@ chars (a squash-appended ` (#123)` is not counted), no trailing period, blank
 line before any body. Breaking also via a `BREAKING CHANGE: …` body line.
 Enforced by: `.githooks/commit-msg` locally, the `lint-pr-title` job on every
 PR (the title becomes the squash commit), and `pr-merge.sh` at merge time.
+
+Model-authored titles go through `normalize-subject.sh` first (`claude.yml`'s
+`implement` job): mechanical defects are repaired rather than failing a run
+that already produced a finished implementation, while a wrong/missing type
+still fails loudly — repairing that would change what the commit claims to
+be. `lint-commit.sh` stays the sole judge of what passes; normalize only
+edits its input and re-lints.
 
 Version bumps: breaking → major · `feat` → minor · `fix`/`perf`/`revert` →
 patch · anything else → not releasable. Changelog sections: Breaking Changes,
@@ -104,13 +112,17 @@ has a `<!-- claude:requirements` comment (from `expand-issue`) -> the
 `implement` job in `claude.yml` fires (`issues: labeled`), immediately
 removes the label (re-adding it later retries the run), writes the issue +
 requirements to `/tmp/issue-context.md`, runs Claude with file tools only
-(no Bash) to make the change, then deterministically lints the title, brands
-a `<type>/<N>-ci-<slug>` branch, commits, pushes, opens a PR, dispatches
-`pr.yml` for it (see that workflow's `workflow_dispatch` trigger for why),
-and swaps `implement` for `status:in-progress` + an assignee on the issue.
-If Claude reports it couldn't implement the change, or the requirements
-comment is missing, the job fails with an `::error::` explaining why instead
-of opening an empty PR.
+(no Bash) to make the change, then deterministically normalizes + lints the
+title, brands a `<type>/<N>-ci-<slug>` branch, commits, pushes, opens a PR,
+dispatches `pr.yml` for it (see that workflow's `workflow_dispatch` trigger
+for why), and swaps `implement` for `status:in-progress` + an assignee on the
+issue. If Claude reports it couldn't implement the change, or the
+requirements comment is missing, the job fails with an `::error::` explaining
+why instead of opening an empty PR. When the job fails *after* Claude has
+edited the tree (unpushable `.github/workflows/**`, an unrepairable title, a
+branch collision, `gh pr create` denied by repo settings), the diff is
+uploaded as a `claude-implementation-patch-*` artifact so the work can be
+`git apply`-ed locally instead of re-run from scratch.
 
 ## Event-driven triggering
 
