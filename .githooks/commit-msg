@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "$(git rev-parse --show-toplevel)/scripts/automation/lint-commit.sh" --file "$1"

@@ -1,0 +1,11 @@
+
+# <type>(<scope>)!: <summary>    (<=72 chars, imperative, no trailing period)
+#
+# types: feat fix docs style refactor perf test build ci chore revert
+# scope: optional lowercase area, e.g. engine, solver, automation, ci
+# !    : breaking change (or add a "BREAKING CHANGE: ..." line in the body)
+#
+# Body (optional, wrapped at 72): what changed and why.
+# Blank line between subject and body is required.
+#
+# Footer: "Closes #<issue>" when this resolves an issue.
