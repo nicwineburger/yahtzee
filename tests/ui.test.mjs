@@ -293,6 +293,8 @@ async function newPage(opts = {}) {
     check("no override chip when holds match advice", (await page.$(".over-chip")) === null);
 
     // Deviating (holding one extra die) prices the deviation and offers a way back.
+    check("matching holds are blue (no deviate class)",
+      (await page.$$eval("#playDiceRow .die.deviate", (e) => e.length)) === 0);
     const extraDie = await page.$$eval("#playDiceRow .die", (els) =>
       els.findIndex((e) => !e.classList.contains("kept")) + 1);
     await page.click(`#playDiceRow .die:nth-child(${extraDie})`);
@@ -302,9 +304,17 @@ async function newPage(opts = {}) {
       chipText.includes("Your hold:") && /−\d+\.\d+\s*pts/.test(chipText.replace(/\s+/g, " ")));
     check("restore button appears on deviation",
       (await page.textContent("#adviceApplyBtn")).includes("Restore advised hold"));
+    // Every held die turns amber while deviating, chip and dice matching.
+    const deviateStyles = await page.$$eval("#playDiceRow .die.kept", (els) =>
+      els.map((e) => ({ dev: e.classList.contains("deviate"),
+                        border: getComputedStyle(e).borderColor })));
+    check("all held dice go amber while deviating",
+      deviateStyles.length === kept + 1
+      && deviateStyles.every((s) => s.dev && s.border === "rgb(160, 106, 0)"));
     await page.click("#adviceApplyBtn");
-    check("restore clears the chip and re-syncs holds",
+    check("restore clears the chip, amber, and re-syncs holds",
       (await page.$(".over-chip")) === null
+      && (await page.$$eval("#playDiceRow .die.deviate", (e) => e.length)) === 0
       && (await held()).filter(Boolean).length === kept);
   }
 

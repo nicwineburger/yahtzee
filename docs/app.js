@@ -447,14 +447,24 @@ function renderPlay() {
   ).join("");
   st.hidden = play.players.length < 2;
 
-  // Dice + roll button
+  // Dice + roll button. When advice is on and the current holds deviate from
+  // the recommended keep, held dice render amber (matching the override chip)
+  // instead of the usual blue.
+  const adv = has && state.ready && !play.over && !play.animating && play.rollsUsed > 0
+    ? E.advise({ mask: pMask(p), upper: pCappedUpper(p),
+                 dice: play.dice, rerollsLeft: 3 - play.rollsUsed })
+    : null;
+  const deviating = !!(play.adviceOn && adv && adv.kind === "keep"
+    && adv.best.nKept < 5 && overrideChipHTML(adv) !== "");
+
   const row = $("playDiceRow");
   row.innerHTML = "";
   for (let i = 0; i < 5; i++) {
     if (has && play.rollsUsed > 0 && !play.over) {
       const rolling = play.animating && play.rollingIdx.includes(i);
       const b = document.createElement("button");
-      b.className = "die" + (play.held[i] ? " kept" : "") + (rolling ? " rolling" : "");
+      b.className = "die" + (play.held[i] ? " kept" : "") + (rolling ? " rolling" : "")
+        + (play.held[i] && deviating ? " deviate" : "");
       b.innerHTML = dieSVG(play.dice[i], 52);
       b.setAttribute("aria-label", rolling ? "Die rolling" :
         `Die ${play.dice[i]}, ${play.held[i] ? "held" : "not held"} — tap to toggle`);
