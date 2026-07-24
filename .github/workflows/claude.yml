@@ -299,6 +299,7 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
           SENDER: ${{ github.event.sender.login }}
+          WORKFLOWS_PAT: ${{ secrets.WORKFLOWS_PAT }}
         run: |
           # claude-code-action revokes its app token and rewrites the git
           # credentials during its in-step cleanup, so this step cannot rely
@@ -316,6 +317,21 @@ jobs:
           if [ -z "$(git status --porcelain)" ]; then
             echo "::error::implement job: implemented=true but the working tree is clean (no changes found)"
             exit 1
+          fi
+
+          # GitHub refuses pushes that create/update .github/workflows/**
+          # with the Actions job token — a platform restriction, not a repo
+          # setting (run 30100553667 died there after doing all the work).
+          # Fail fast with guidance, unless a WORKFLOWS_PAT secret
+          # (fine-grained PAT: contents + workflows write) is configured.
+          if git status --porcelain | awk '{print $2}' | grep -q '^\.github/workflows/'; then
+            if [ -n "$WORKFLOWS_PAT" ]; then
+              echo "::notice::change touches .github/workflows/** — pushing with WORKFLOWS_PAT instead of the job token"
+              git remote set-url origin "https://x-access-token:${WORKFLOWS_PAT}@github.com/${REPO}.git"
+            else
+              echo "::error::implementation touches .github/workflows/**, which the Actions token cannot push (GitHub platform restriction). Options: run /issue-flow $ISSUE locally (pushes as you), or add a WORKFLOWS_PAT repo secret (fine-grained PAT with contents+workflows write) and re-add the 'implement' label to retry."
+              exit 1
+            fi
           fi
 
           PR_TITLE="$(printf '%s' "$OUTPUT" | jq -r '.pr_title')"
