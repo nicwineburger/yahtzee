@@ -205,6 +205,24 @@ details.more summary {
   font-size: 13.5px; color: var(--muted); cursor: pointer; user-select: none;
 }
 .advice-switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+.anim-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+}
+.anim-row .advice-switch { margin-top: 10px; }
+.anim-row .seg { margin-top: 10px; }
+.anim-row .seg[hidden] { display: none; }
+.die.rolling { animation: tumble 0.24s infinite ease-in-out; border-color: var(--line); }
+@keyframes tumble {
+  0%   { transform: translateY(0) rotate(0deg); }
+  25%  { transform: translateY(-3px) rotate(-7deg); }
+  50%  { transform: translateY(1px) rotate(5deg); }
+  75%  { transform: translateY(-2px) rotate(-4deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .die.rolling { animation: none; }
+}
 .box:disabled { cursor: default; }
 .box.scoreable { border-style: dashed; border-color: var(--keep-line); cursor: pointer; }
 .box.scoreable .val { color: var(--accent); font-weight: 700; }
