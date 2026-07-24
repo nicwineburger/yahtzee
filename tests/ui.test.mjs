@@ -200,6 +200,11 @@ async function newPage(opts = {}) {
   await page.waitForSelector('.sheet button[data-n="2"]');
   await page.click('.sheet button[data-n="2"]');
   check("round 1, player 1", (await page.textContent("#playTurnInfo")).includes("Round 1/12 — Player 1"));
+  // Disable the roll animation so dice values can be read immediately.
+  await page.click("#animToggle");
+  check("animation toggle off hides the speed control",
+    !(await page.$eval("#animToggle", (e) => e.checked))
+    && await page.$eval("#animSpeedSeg", (e) => e.hidden));
 
   // Roll / hold / reroll mechanics
   await page.click("#rollBtn");
@@ -291,6 +296,63 @@ async function newPage(opts = {}) {
   await page.waitForFunction(() => document.getElementById("evValue").textContent !== "–");
   await page.click('#modeSeg button[data-mode="play"]');
   check("finished game persists", /wins|tie|Game over/.test(await page.textContent("#playTurnInfo")));
+  await ctx.close();
+}
+
+// ═══ 5. Roll animation ══════════════════════════════════════════════════════
+{
+  const { ctx, page } = await newPage();
+  await page.click('#modeSeg button[data-mode="play"]');
+  await page.click("#playNewBtn");
+  await page.waitForSelector('.sheet button[data-n="1"]');
+  await page.click('.sheet button[data-n="1"]');
+
+  check("animation defaults on with speed control visible (Normal)",
+    await page.$eval("#animToggle", (e) => e.checked)
+    && !(await page.$eval("#animSpeedSeg", (e) => e.hidden))
+    && await page.$eval('#animSpeedSeg button[data-speed="normal"]', (b) => b.classList.contains("on")));
+
+  await page.click("#rollBtn");
+  check("dice tumble during the roll", (await page.$$eval(".die.rolling", (e) => e.length)) === 5);
+  check("roll button locked while rolling",
+    await page.$eval("#rollBtn", (b) => b.disabled && b.textContent === "Rolling…"));
+  check("no score previews while rolling", (await page.$$eval(".box.scoreable", (e) => e.length)) === 0);
+  await page.waitForSelector(".die.rolling", { state: "detached", timeout: 2500 });
+  check("dice settle and previews appear",
+    (await page.$$eval(".box.scoreable", (e) => e.length)) === 12
+    && await page.$eval("#rollBtn", (b) => !b.disabled));
+
+  // Speed control: fast settles well before slow's duration.
+  await page.click('#animSpeedSeg button[data-speed="fast"]');
+  await page.click("#playDiceRow .die:nth-child(1)");   // hold one die
+  await page.click("#rollBtn");
+  check("held die does not tumble", (await page.$$eval(".die.rolling", (e) => e.length)) === 4);
+  await page.waitForTimeout(700);                        // fast = 400ms
+  check("fast roll settled by 700ms", (await page.$$eval(".die.rolling", (e) => e.length)) === 0);
+  await page.click('#animSpeedSeg button[data-speed="slow"]');
+  await page.click("#rollBtn");
+  await page.waitForTimeout(900);                        // slow = 1400ms
+  check("slow roll still tumbling at 900ms", (await page.$$eval(".die.rolling", (e) => e.length)) > 0);
+  await page.waitForSelector(".die.rolling", { state: "detached", timeout: 2500 });
+
+  // Settings persist.
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.getElementById("evValue").textContent !== "–");
+  check("speed choice persists (slow)",
+    await page.$eval('#animSpeedSeg button[data-speed="slow"]', (b) => b.classList.contains("on")));
+  await page.click("#animToggle");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.getElementById("evValue").textContent !== "–");
+  check("animation off persists", !(await page.$eval("#animToggle", (e) => e.checked)));
+  await ctx.close();
+}
+
+// ═══ 6. Reduced motion preference ═══════════════════════════════════════════
+{
+  const { ctx, page } = await newPage({ reducedMotion: "reduce" });
+  await page.click('#modeSeg button[data-mode="play"]');
+  check("prefers-reduced-motion defaults the animation off",
+    !(await page.$eval("#animToggle", (e) => e.checked)));
   await ctx.close();
 }
 

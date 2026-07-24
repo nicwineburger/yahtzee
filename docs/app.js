@@ -33,7 +33,18 @@ const play = {
   rollsUsed: 0,                       // 0..3
   adviceOn: false,
   over: false,
+  animating: false,                   // transient: dice are mid-tumble
+  rollingIdx: [],                     // which dice are tumbling
 };
+
+const ANIM_KEY = "yacht-solver-anim";
+const ANIM_DURATION = { slow: 1400, normal: 800, fast: 400 };
+const anim = {
+  // Default off for users who ask the OS for reduced motion.
+  on: !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches),
+  speed: "normal",
+};
+let animTimer = null;
 
 // ── Derived (advisor) ───────────────────────────────────────────────────────
 const mask = () => {
@@ -314,19 +325,44 @@ function newPlayGame(n) {
 }
 
 function playRoll() {
-  if (play.over || !play.players.length || play.rollsUsed >= 3) return;
+  if (play.over || !play.players.length || play.rollsUsed >= 3 || play.animating) return;
   if (play.rollsUsed === 0) { play.dice = []; play.held = Array(5).fill(false); }
+  const rolling = [];
   for (let i = 0; i < 5; i++) {
     if (play.rollsUsed === 0 || !play.held[i]) {
       play.dice[i] = 1 + Math.floor(Math.random() * 6);
+      rolling.push(i);
     }
   }
   play.rollsUsed++;
+  if (!anim.on) { render(); return; }
+
+  // Tumble: the outcome above is already committed; we just scramble the
+  // rolling dice's faces on screen until the timer settles them.
+  play.animating = true;
+  play.rollingIdx = rolling;
   render();
+  const t0 = Date.now();
+  const duration = ANIM_DURATION[anim.speed] || ANIM_DURATION.normal;
+  clearInterval(animTimer);
+  animTimer = setInterval(() => {
+    if (Date.now() - t0 >= duration) {
+      clearInterval(animTimer);
+      play.animating = false;
+      play.rollingIdx = [];
+      render();
+      return;
+    }
+    const row = $("playDiceRow");
+    for (const i of rolling) {
+      const die = row.children[i];
+      if (die) die.innerHTML = dieSVG(1 + Math.floor(Math.random() * 6), 52);
+    }
+  }, 75);
 }
 
 function playToggleHold(i) {
-  if (play.rollsUsed === 0 || play.rollsUsed >= 3 || play.over) return;
+  if (play.rollsUsed === 0 || play.rollsUsed >= 3 || play.over || play.animating) return;
   play.held[i] = !play.held[i];
   render();
 }
@@ -338,7 +374,7 @@ function playHoldKeep(keepVec) {
 
 function playScore(cat) {
   const p = play.players[play.current];
-  if (play.over || play.rollsUsed === 0 || p.boxes[cat] !== null) return;
+  if (play.over || play.rollsUsed === 0 || p.boxes[cat] !== null || play.animating) return;
   p.boxes[cat] = E.SCORES[E.diceValuesToIdx(play.dice)][cat];
   play.dice = [];
   play.held = Array(5).fill(false);
@@ -396,10 +432,11 @@ function renderPlay() {
   row.innerHTML = "";
   for (let i = 0; i < 5; i++) {
     if (has && play.rollsUsed > 0 && !play.over) {
+      const rolling = play.animating && play.rollingIdx.includes(i);
       const b = document.createElement("button");
-      b.className = "die" + (play.held[i] ? " kept" : "");
+      b.className = "die" + (play.held[i] ? " kept" : "") + (rolling ? " rolling" : "");
       b.innerHTML = dieSVG(play.dice[i], 52);
-      b.setAttribute("aria-label",
+      b.setAttribute("aria-label", rolling ? "Die rolling" :
         `Die ${play.dice[i]}, ${play.held[i] ? "held" : "not held"} — tap to toggle`);
       b.onclick = () => playToggleHold(i);
       row.appendChild(b);
@@ -421,16 +458,23 @@ function renderPlay() {
       .map((s) => `${s.p.name}: ${s.total}`).join(" · ");
   } else {
     btn.hidden = false;
-    btn.disabled = play.rollsUsed >= 3;
-    btn.textContent = play.rollsUsed === 0 ? "Roll"
+    btn.disabled = play.rollsUsed >= 3 || play.animating;
+    btn.textContent = play.animating ? "Rolling…"
+      : play.rollsUsed === 0 ? "Roll"
       : play.rollsUsed < 3 ? `Reroll (${3 - play.rollsUsed} left)` : "No rolls left";
-    hint.textContent = play.rollsUsed === 0
-      ? `Roll to start ${play.players.length > 1 ? p.name + "'s" : "your"} turn.`
-      : play.rollsUsed < 3
-        ? "Tap dice to hold them, then reroll — or bank the roll into an open box below."
-        : "Final roll — tap an open box below to score it.";
+    hint.textContent = play.animating ? "…"
+      : play.rollsUsed === 0
+        ? `Roll to start ${play.players.length > 1 ? p.name + "'s" : "your"} turn.`
+        : play.rollsUsed < 3
+          ? "Tap dice to hold them, then reroll — or bank the roll into an open box below."
+          : "Final roll — tap an open box below to score it.";
   }
   $("adviceToggle").checked = play.adviceOn;
+  $("animToggle").checked = anim.on;
+  $("animSpeedSeg").hidden = !anim.on;
+  document.querySelectorAll("#animSpeedSeg button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.speed === anim.speed);
+  });
 
   // Scorecard
   $("playCardTitle").textContent = has
@@ -438,7 +482,7 @@ function renderPlay() {
   const up = $("playUpperCol"), lo = $("playLowerCol");
   up.innerHTML = ""; lo.innerHTML = "";
   if (has) {
-    const previewIdx = play.rollsUsed > 0 && !play.over
+    const previewIdx = play.rollsUsed > 0 && !play.over && !play.animating
       ? E.diceValuesToIdx(play.dice) : null;
     for (let c = 0; c < 12; c++) {
       const filled = p.boxes[c] !== null;
@@ -468,9 +512,10 @@ function renderPlayAdvice(p) {
   if (card.hidden) return;
   const body = $("adviceBody");
   if (!state.ready) { body.className = "advice-empty"; body.textContent = "Loading solver…"; return; }
-  if (play.rollsUsed === 0) {
+  if (play.rollsUsed === 0 || play.animating) {
     body.className = "advice-empty";
-    body.textContent = "Roll — the optimal move will appear here.";
+    body.textContent = play.animating ? "Rolling…"
+      : "Roll — the optimal move will appear here.";
     return;
   }
 
@@ -635,6 +680,10 @@ $("resetBtn").onclick = () => {
 $("playNewBtn").onclick = openPlayNewSheet;
 $("rollBtn").onclick = playRoll;
 $("adviceToggle").onchange = (e) => { play.adviceOn = e.target.checked; render(); };
+$("animToggle").onchange = (e) => { anim.on = e.target.checked; render(); };
+document.querySelectorAll("#animSpeedSeg button").forEach((b) => {
+  b.onclick = () => { anim.speed = b.dataset.speed; render(); };
+});
 
 $("evChip").onclick = openChartSheet;
 
@@ -682,6 +731,7 @@ function save() {
       over: play.over,
     }));
     localStorage.setItem(MODE_KEY, mode);
+    localStorage.setItem(ANIM_KEY, JSON.stringify({ on: anim.on, speed: anim.speed }));
   } catch (e) { /* private mode etc. — fine */ }
 }
 
@@ -716,6 +766,11 @@ function load() {
     }
     const m = localStorage.getItem(MODE_KEY);
     if (m === "advisor" || m === "play") mode = m;
+    const a = JSON.parse(localStorage.getItem(ANIM_KEY) || "null");
+    if (a && typeof a === "object") {
+      if (typeof a.on === "boolean") anim.on = a.on;
+      if (a.speed in ANIM_DURATION) anim.speed = a.speed;
+    }
   } catch (e) { /* corrupted storage — start fresh */ }
 }
 
