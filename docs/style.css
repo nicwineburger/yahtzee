@@ -124,6 +124,8 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em;
 /* The card's content swaps between a one-line prompt and full advice many
    times per turn; a reserved height keeps the cards below it from jumping. */
 #advice { border-left: 4px solid var(--accent); min-height: 224px; display: flex; }
+/* display:flex above would otherwise defeat the hidden attribute. */
+#advice[hidden] { display: none; }
 #adviceBody { width: 100%; }
 .advice-empty {
   color: var(--muted); font-size: 14.5px; padding: 4px 2px;
