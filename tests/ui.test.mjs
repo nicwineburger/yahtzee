@@ -201,6 +201,9 @@ async function newPage(opts = {}) {
   await page.click('#modeSeg button[data-mode="play"]');
   check("play view shown / advisor hidden",
     await page.$eval("#playView", (e) => !e.hidden) && await page.$eval("#advisorView", (e) => e.hidden));
+  // offsetParent, not the attribute: a CSS display rule can defeat [hidden].
+  check("advice card actually not displayed with the toggle off",
+    await page.$eval("#advice", (e) => e.hidden && e.offsetParent === null));
   await page.click("#playNewBtn");
   await page.waitForSelector('.sheet button[data-n="2"]');
   await page.click('.sheet button[data-n="2"]');
