@@ -133,6 +133,16 @@ fails fast with guidance unless an optional `WORKFLOWS_PAT` secret
 (fine-grained PAT, contents + workflows write) is configured — otherwise run
 such issues through the local `/issue-flow`.
 
+Every job across these workflows carries a `timeout-minutes` cap, so a hung
+step (e.g. a `git fetch` stuck inside `actions/checkout`) fails the run
+instead of burning the full default 6-hour ceiling. Jobs that don't read the
+large committed data dirs (all of `claude.yml`, plus `lint-pr-title`,
+`deploy`, and `release`) use a blob-filtered sparse checkout
+(`filter: blob:none` plus `!/math/data/`) that skips them — edit the exclude
+pattern for other repos; it's harmless if the path doesn't exist. Each Claude job additionally uploads its execution log as a
+build artifact and writes a run summary (turns/cost/duration/result) to the
+job's Summary page — the first place to check when a run misbehaves.
+
 ## Template export
 
 `export-template.sh <dir>` copies the generic layer (scripts, hooks, skills,
