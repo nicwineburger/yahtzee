@@ -20,6 +20,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      id-token: write # Required: the GitHub App exchanges this OIDC token for its API token
     steps:
       - id: key
         env:
@@ -49,6 +50,8 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      id-token: write # Required: the GitHub App exchanges this OIDC token for its API token
+      actions: read # Lets Claude read CI results when replying on PRs
     steps:
       - id: key
         env:
