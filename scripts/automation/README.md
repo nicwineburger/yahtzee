@@ -124,6 +124,11 @@ secret exists — note this is API-key billed, separate from a claude.ai
 subscription. Subscription-only alternative: a scheduled claude.ai routine
 that periodically scans for new issues/mentions and runs the same skills.
 
+The `implement` job additionally requires the repo setting **Settings →
+Actions → General → "Allow GitHub Actions to create and approve pull
+requests"** (off by default; the job opens PRs with the workflow token and
+fails at `gh pr create` without it).
+
 ## Template export
 
 `export-template.sh <dir>` copies the generic layer (scripts, hooks, skills,

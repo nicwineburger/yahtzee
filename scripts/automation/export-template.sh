@@ -143,6 +143,11 @@ cat >"$TARGET/TEMPLATE_SETUP.md" <<'EOF'
    the change on a branch and opens a PR.
 7. In GitHub repo settings, allow ONLY squash merging (the automation
    assumes squash; PR titles become the commits on the default branch).
+8. Settings -> Actions -> General -> Workflow permissions: check "Allow
+   GitHub Actions to create and approve pull requests" — the implement job
+   opens PRs with the workflow token and fails without it. API equivalent:
+   `gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow -f
+   default_workflow_permissions=read -F can_approve_pull_request_reviews=true`
 
 Day-to-day: see `scripts/automation/README.md` and the Claude Code skills in
 `.claude/skills/` (issue-flow, expand-issue, pr-fix, release, tdd).
