@@ -283,16 +283,16 @@ async function newPage(opts = {}) {
     }));
   await page.screenshot({ path: join(SHOTS, "play_advice_placement.png") });
   await page.click("#rollBtn");
-  await page.waitForSelector("#adviceApplyBtn");
+  await page.waitForSelector(".advice-title");
   const title = (await page.textContent(".advice-title")).trim();
   if (title.startsWith("Keep")) {
-    await page.click("#adviceApplyBtn");
+    // Auto-hold: the recommendation is pre-selected — no button, no chip.
     const kept = (await held()).filter(Boolean).length;
-    check("'Hold these for me' sets holds", kept > 0 && kept < 6);
-
-    // Override chip: holds matching the recommendation show no chip; deviating
-    // (holding one extra die) shows the amber chip with the EV cost.
+    check("advice keep auto-held after the roll", kept > 0 && kept < 5);
+    check("no restore button while holds match advice", (await page.$("#adviceApplyBtn")) === null);
     check("no override chip when holds match advice", (await page.$(".over-chip")) === null);
+
+    // Deviating (holding one extra die) prices the deviation and offers a way back.
     const extraDie = await page.$$eval("#playDiceRow .die", (els) =>
       els.findIndex((e) => !e.classList.contains("kept")) + 1);
     await page.click(`#playDiceRow .die:nth-child(${extraDie})`);
@@ -300,8 +300,12 @@ async function newPage(opts = {}) {
     const chipText = await page.textContent(".over-chip");
     check("deviating holds show the override chip with EV cost",
       chipText.includes("Your hold:") && /−\d+\.\d+\s*pts/.test(chipText.replace(/\s+/g, " ")));
-    await page.click(`#playDiceRow .die:nth-child(${extraDie})`);
-    check("chip clears when holds match again", (await page.$(".over-chip")) === null);
+    check("restore button appears on deviation",
+      (await page.textContent("#adviceApplyBtn")).includes("Restore advised hold"));
+    await page.click("#adviceApplyBtn");
+    check("restore clears the chip and re-syncs holds",
+      (await page.$(".over-chip")) === null
+      && (await held()).filter(Boolean).length === kept);
   }
 
   // Full seeded 2-player game: roll to the final roll, score the advised box.
@@ -431,7 +435,7 @@ async function newPage(opts = {}) {
   check("scorecard fixed while dice tumble",
     Math.abs((await box("#playScoreSection")).y - yBefore) < 1);
   await page.waitForSelector(".die.rolling", { state: "detached", timeout: 2500 });
-  await page.waitForSelector("#adviceApplyBtn");
+  await page.waitForSelector(".advice-title");
   check("scorecard fixed after advice renders",
     Math.abs((await box("#playScoreSection")).y - yBefore) < 1);
   await ctx.close();

@@ -34,9 +34,10 @@ or extra-Yacht bonuses.
     score, banks the box you tap, tracks upper bonus and totals, and
     supports 1–4 players pass-and-play from one device. An advice toggle
     (in the gear settings, along with roll animation/speed and theme)
-    overlays the optimal move ("Hold these for me" / "Score it") without
-    playing for you; holding different dice than recommended shows the
-    EV cost of your deviation.
+    overlays the optimal move: the recommended keep is pre-selected after
+    each roll, changing the holds shows the EV cost of your deviation
+    (with a one-tap restore), and scoring a box is always your tap — the
+    advisor never banks anything for you.
   The expected-points chip opens a chart of expected points left vs boxes
   filled (one line per player in play mode). All state persists in
   localStorage.
