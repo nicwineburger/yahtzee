@@ -165,6 +165,10 @@ async function newPage(opts = {}) {
   check("chart has one dot per recorded turn", dots === 2);
   check("advisor chart x-axis is 'boxes filled'",
     (await page.$eval(".sheet svg.chart", (e) => e.textContent)).includes("boxes filled"));
+  check("advisor chart shows optimal glide-path reference line",
+    (await page.$(".sheet .c-ref")) !== null);
+  check("reference line tooltip identifies the optimal glide path",
+    (await page.$eval(".sheet .c-ref title", (e) => e.textContent)).includes("Optimal"));
   await page.mouse.click(195, 100);
   await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
   await page.reload({ waitUntil: "networkidle" });
@@ -393,6 +397,10 @@ async function newPage(opts = {}) {
   check("play chart x-axis is 'turn' with after-turn tooltips",
     chartText.includes("turn") && chartText.includes("after turn")
     && !chartText.includes("boxes filled"));
+  check("play-mode chart shows optimal glide-path reference line",
+    (await page.$(".sheet .c-ref")) !== null);
+  check("reference line tooltip identifies the optimal glide path (play mode)",
+    (await page.$eval(".sheet .c-ref title", (e) => e.textContent)).includes("Optimal"));
   await page.mouse.click(195, 80);
   await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
 
