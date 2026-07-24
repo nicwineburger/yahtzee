@@ -31,12 +31,36 @@ jobs:
       - if: steps.key.outputs.present == 'true'
         uses: actions/checkout@v4
       - if: steps.key.outputs.present == 'true'
+        id: claude
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: "/expand-issue ${{ github.event.issue.number }}"
+          prompt: |
+            /expand-issue ${{ github.event.issue.number }}
+
+            Success criterion: this run only succeeds if the requirements
+            comment is actually created or updated on the issue (via
+            `gh issue comment` or `gh api ... -X PATCH`, per the skill).
+            Set the structured output `posted` field to true only once that
+            call has actually succeeded; otherwise set it false and put the
+            reason (e.g. a denied tool call, a check-setup.sh failure) in
+            `reason` — do not report success without a live comment.
+          # Safe to grant repo script/gh access: the action only runs this
+          # job for actors with repo write access by default (docs/security.md).
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Write,Bash(scripts/automation/*.sh:*),Bash(./scripts/automation/*.sh:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh api:*)"
+            --json-schema '{"type":"object","properties":{"posted":{"type":"boolean","description":"true only if the requirements comment was actually created or updated via gh issue comment or gh api"},"reason":{"type":"string","description":"why posting failed or was skipped; empty string if posted is true"}},"required":["posted","reason"]}'
+      - if: steps.key.outputs.present == 'true'
+        name: Fail loudly if no requirements comment was posted
+        env:
+          OUTPUT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          if [ -z "$OUTPUT" ] || [ "$(printf '%s' "$OUTPUT" | jq -r '.posted // false')" != "true" ]; then
+            echo "::error::expand-issue did not post a requirements comment (structured_output: ${OUTPUT:-<empty>})"
+            exit 1
+          fi
 
   # @claude mentions in issue/PR comments (humans only; bot comments never
   # retrigger — that also keeps the automation's own comments from looping).
@@ -69,3 +93,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Safe to grant repo script access: the action only runs this job
+          # for actors with repo write access by default (docs/security.md).
+          claude_args: |
+            --allowedTools "Bash(scripts/automation/*.sh:*),Bash(./scripts/automation/*.sh:*)"
