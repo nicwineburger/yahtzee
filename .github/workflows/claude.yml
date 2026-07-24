@@ -1,0 +1,68 @@
+name: Claude
+
+# Event-driven automation via the Claude GitHub App. Inert (green no-op with
+# a notice) until the app is installed (/install-github-app) and an
+# ANTHROPIC_API_KEY repo secret exists. See scripts/automation/README.md.
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  # New human-filed issue -> expand it into full requirements on the issue.
+  expand-issue:
+    if: github.event_name == 'issues' && github.event.issue.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - id: key
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
+      - if: steps.key.outputs.present != 'true'
+        run: echo "::notice::ANTHROPIC_API_KEY secret not set — Claude automation is inert (see scripts/automation/README.md)"
+      - if: steps.key.outputs.present == 'true'
+        uses: actions/checkout@v4
+      - if: steps.key.outputs.present == 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: "/expand-issue ${{ github.event.issue.number }}"
+
+  # @claude mentions in issue/PR comments (humans only; bot comments never
+  # retrigger — that also keeps the automation's own comments from looping).
+  mention:
+    if: >-
+      github.event_name != 'issues' &&
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - id: key
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
+      - if: steps.key.outputs.present != 'true'
+        run: echo "::notice::ANTHROPIC_API_KEY secret not set — Claude automation is inert (see scripts/automation/README.md)"
+      - if: steps.key.outputs.present == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - if: steps.key.outputs.present == 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

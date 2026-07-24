@@ -1,0 +1,7 @@
+{
+  "model": "opusplan",
+  "env": {
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-fable-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
+  }
+}

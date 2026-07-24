@@ -74,3 +74,17 @@ Two halves, one repo:
   heavy solves.
 - Full House counts five-of-a-kind in BOTH rule sets (for Yacht Dice this is
   deliberate and evidence-backed — see the comparison doc's 325-max note).
+
+## Repo automation
+
+- Conventional commits are enforced by `.githooks/commit-msg` — run
+  `scripts/automation/install-hooks.sh` once per clone. Squash merge only:
+  the PR title becomes the commit on main and is linted in CI (`pr.yml`).
+- Deterministic tooling lives in `scripts/automation/` (interfaces, exit
+  codes, and comment-marker conventions in its README). Orchestration skills:
+  `/issue-flow`, `/expand-issue`, `/pr-fix`, `/release`, `/tdd`.
+- Implementation work is delegated to the `implementer` subagent (Sonnet);
+  the main agent orchestrates and reviews — review is never delegated.
+- The generic layer is template-exportable via
+  `scripts/automation/export-template.sh` — keep repo-specific values in
+  `.automation.conf` (and this file), never in scripts/skills/templates.
