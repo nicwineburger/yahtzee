@@ -33,8 +33,10 @@ or extra-Yacht bonuses.
     between rolls, 3 rolls a turn), previews what every open box would
     score, banks the box you tap, tracks upper bonus and totals, and
     supports 1–4 players pass-and-play from one device. An advice toggle
+    (in the gear settings, along with roll animation/speed and theme)
     overlays the optimal move ("Hold these for me" / "Score it") without
-    playing for you.
+    playing for you; holding different dice than recommended shows the
+    EV cost of your deviation.
   The expected-points chip opens a chart of expected points left vs boxes
   filled (one line per player in play mode). All state persists in
   localStorage.
