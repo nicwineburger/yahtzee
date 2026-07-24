@@ -6,9 +6,21 @@ on:
     # 'edited' re-lints when the PR title changes (the title becomes the
     # squash commit on main).
     types: [opened, edited, synchronize, reopened]
+  # Fallback for PRs opened by claude.yml's `implement` job: PRs created
+  # with the workflow's GITHUB_TOKEN land in an approval-required state for
+  # pull_request events rather than just running (GitHub's github_token
+  # concept docs), so that job dispatches this workflow directly instead —
+  # workflow_dispatch always creates a run regardless of which token
+  # triggered it, with zero new secrets. Checks still attach to the PR's
+  # head SHA this way, so `gh pr checks` / pr-merge.sh see them normally.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to lint (set by claude.yml's implement job)"
+        required: true
 
 concurrency:
-  group: pr-${{ github.event.pull_request.number }}
+  group: pr-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
@@ -16,9 +28,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve PR title (workflow_dispatch has no pull_request context)
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          EVENT_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TITLE="$(gh pr view "$PR_NUMBER" --json title -q .title)"
+          else
+            TITLE="$EVENT_TITLE"
+          fi
+          printf 'title=%s\n' "$TITLE" >>"$GITHUB_OUTPUT"
       - name: PR title must be a conventional commit
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
         run: ./scripts/automation/lint-commit.sh --message "$PR_TITLE"
 
   # Test jobs mirror .github/workflows/pages.yml so PRs get the same
