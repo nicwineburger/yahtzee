@@ -297,8 +297,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OUTPUT: ${{ steps.claude.outputs.structured_output }}
           ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
           SENDER: ${{ github.event.sender.login }}
         run: |
+          # claude-code-action revokes its app token and rewrites the git
+          # credentials during its in-step cleanup, so this step cannot rely
+          # on checkout's persisted auth for pushing (run 30086522159 failed
+          # exactly there). Point origin at the job token explicitly; the
+          # token is secret-masked in logs.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
           IMPLEMENTED="$(printf '%s' "$OUTPUT" | jq -r '.implemented // false')"
           if [ "$IMPLEMENTED" != "true" ]; then
             REASON="$(printf '%s' "$OUTPUT" | jq -r '.reason // "no reason given"')"
