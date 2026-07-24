@@ -28,11 +28,13 @@ never skips.
 
 1. Type: `feat` for enhancements, `fix` for bugs (judge from the issue).
    `scripts/automation/branch.sh <type> <N> <short-slug>`.
-2. Spawn the `implementer` subagent (Agent tool, subagent_type `implementer`)
+2. `gh issue edit <N> --add-label status:in-progress --add-assignee @me`
+   (swaps out `implement`/`status:requirements` as work actually starts).
+3. Spawn the `implementer` subagent (Agent tool, subagent_type `implementer`)
    with a prompt containing, verbatim: the full requirements comment, the
    relevant CLAUDE.md conventions, and the instruction to follow its TDD and
    conventional-commit rules. Do not paraphrase the requirements.
-3. If STATUS is `blocked`, resolve what you can (answer questions, adjust
+4. If STATUS is `blocked`, resolve what you can (answer questions, adjust
    requirements) and re-spawn; if it needs the user, stop and ask.
 
 ## Phase 3 — PR
@@ -84,5 +86,7 @@ fails 3 times on the same cause, stop and escalate to the user.
    issues (`gh issue create`) rather than leaving TODOs in text.
 3. `Closes #N` normally auto-closes; check state and `gh issue close <N>` if
    still open.
-4. Tell the user: merged PR, conclusion link, and what a release would look
+4. `gh issue edit <N> --remove-label status:in-progress` — the issue is
+   closed, not in progress.
+5. Tell the user: merged PR, conclusion link, and what a release would look
    like now (`scripts/automation/next-version.sh` output).
