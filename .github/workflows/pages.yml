@@ -23,11 +23,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
       - name: Engine regression test vs Python-solver fixtures
-        run: node docs/engine_test.mjs
+        run: npm run test:engine
+      - name: Engine property tests
+        run: npm run test:engine-extra
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: UI tests (both modes, mobile viewport)
+        run: npm run test:ui
+
+  test-math:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy tqdm
+      - name: Solver + export tests
+        run: python test_yacht_clubhouse.py
+        working-directory: math
 
   deploy:
-    needs: test
+    needs: [test, test-math]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

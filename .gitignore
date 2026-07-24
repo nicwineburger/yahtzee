@@ -6,6 +6,12 @@
 .venv/
 venv/
 
+# Node (test tooling only)
+node_modules/
+
+# Playwright test screenshots
+/tests/.artifacts/
+
 # OS / editor junk
 .DS_Store
 
