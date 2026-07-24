@@ -241,7 +241,7 @@ function keepAdviceHTML(best, alts, dice, applyLabel, chipHTML = "") {
       ${chipHTML}
       ${adviceDiceHTML(best.keepVec, dice)}
       <p class="advice-sub">Expected final haul from here: ${fmt(best.ev)} pts</p>
-      <button class="apply-btn" id="adviceApplyBtn">${applyLabel}</button>
+      ${applyLabel ? `<button class="apply-btn" id="adviceApplyBtn">${applyLabel}</button>` : ""}
       ${alts.length ? `<details class="more"><summary>Other keeps — tap to keep instead</summary>
         <ul class="alts">${alts.map((a, i) =>
           `<li><button class="alt-btn" data-alt="${i}">
@@ -336,7 +336,7 @@ function playRoll() {
     }
   }
   play.rollsUsed++;
-  if (!anim.on) { render(); return; }
+  if (!anim.on) { autoHoldAdvice(); render(); return; }
 
   // Tumble: the outcome above is already committed; we just scramble the
   // rolling dice's faces on screen until the timer settles them.
@@ -351,6 +351,7 @@ function playRoll() {
       clearInterval(animTimer);
       play.animating = false;
       play.rollingIdx = [];
+      autoHoldAdvice();
       render();
       return;
     }
@@ -371,6 +372,24 @@ function playToggleHold(i) {
 function playHoldKeep(keepVec) {
   play.held = diceKeptFlags(keepVec, play.dice);
   render();
+}
+
+// With advice on, the player intends to follow it: pre-select the recommended
+// keep after each roll settles. Touching the dice is then always a deliberate
+// deviation (which the override chip prices). Never auto-scores — banking a
+// box stays a manual tap. Skips stand-pat advice so a stray Reroll tap can't
+// burn a roll changing nothing.
+function autoHoldAdvice() {
+  if (!state.ready || !play.adviceOn || play.over || !play.players.length
+      || play.rollsUsed === 0 || play.rollsUsed >= 3) return;
+  const p = play.players[play.current];
+  const adv = E.advise({
+    mask: pMask(p), upper: pCappedUpper(p),
+    dice: play.dice, rerollsLeft: 3 - play.rollsUsed,
+  });
+  if (adv.kind === "keep" && adv.best.nKept < 5) {
+    play.held = diceKeptFlags(adv.best.keepVec, play.dice);
+  }
 }
 
 function playScore(cat) {
@@ -534,27 +553,31 @@ function renderPlayAdvice(p) {
 
   const best = adv.best;
   const alts = adv.alternatives.slice(1, 4);
-  body.innerHTML = keepAdviceHTML(best, alts, play.dice, "Hold these for me",
-    overrideChipHTML(adv));
-  $("adviceApplyBtn").onclick = () => playHoldKeep(best.keepVec);
+  const chip = overrideChipHTML(adv);
+  // Auto-hold keeps the dice matching the advice, so the apply button is only
+  // needed as a way back after the player deviates.
+  body.innerHTML = keepAdviceHTML(best, alts, play.dice,
+    chip ? "Restore advised hold" : null, chip);
+  const applyBtn = $("adviceApplyBtn");
+  if (applyBtn) applyBtn.onclick = () => playHoldKeep(best.keepVec);
   body.querySelectorAll(".alt-btn").forEach((b) => {
     b.onclick = () => playHoldKeep(alts[Number(b.dataset.alt)].keepVec);
   });
 }
 
 // Treatment "B": when the player's holds differ from the recommended keep,
-// show an amber chip with their hold and its EV cost. Only once they've
-// actually held something — untouched dice aren't a decision yet.
+// show an amber chip with their hold and its EV cost. With auto-hold, any
+// mismatch — including clearing every hold — is a deliberate deviation.
 function overrideChipHTML(adv) {
   const heldVals = play.dice.filter((f, i) => play.held[i]);
-  if (!heldVals.length) return "";
   const heldVec = [0, 0, 0, 0, 0, 0];
   heldVals.forEach((f) => heldVec[f - 1]++);
   if (adv.best.keepVec.every((c, f) => c === heldVec[f])) return "";
   const row = adv.alternatives.find((r) => r.keepVec.every((c, f) => c === heldVec[f]));
   if (!row) return "";
   const cost = adv.best.ev - row.ev;
-  return `<span class="over-chip">Your hold: ${heldVals.slice().sort().join(" · ")}
+  const label = heldVals.length ? heldVals.slice().sort().join(" · ") : "none";
+  return `<span class="over-chip">Your hold: ${label}
     &nbsp;·&nbsp; −${fmt(cost)} pts</span>`;
 }
 
