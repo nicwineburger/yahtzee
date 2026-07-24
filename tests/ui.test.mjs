@@ -31,10 +31,13 @@ const MIME = {
   ".md": "text/markdown",
 };
 
+const overrides = new Map();   // path -> body, for the update-check section
+let indexHits = 0;
 const server = http.createServer(async (req, res) => {
   try {
     const path = req.url === "/" ? "/index.html" : req.url.split("?")[0];
-    const data = await readFile(join(DOCS, path));
+    if (path === "/index.html") indexHits++;
+    const data = overrides.has(path) ? overrides.get(path) : await readFile(join(DOCS, path));
     res.writeHead(200, { "content-type": MIME[extname(path)] || "application/octet-stream" });
     res.end(data);
   } catch {
@@ -144,6 +147,8 @@ async function newPage(opts = {}) {
   await page.waitForSelector(".sheet svg.chart");
   const dots = await page.$$eval(".sheet .c-dot", (e) => e.length);
   check("chart has one dot per recorded turn", dots === 2);
+  check("advisor chart x-axis is 'boxes filled'",
+    (await page.$eval(".sheet svg.chart", (e) => e.textContent)).includes("boxes filled"));
   await page.mouse.click(195, 100);
   await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
   await page.reload({ waitUntil: "networkidle" });
@@ -282,6 +287,10 @@ async function newPage(opts = {}) {
   await page.waitForSelector(".sheet svg.chart");
   check("chart draws one line per player",
     (await page.$$eval(".sheet .c-line", (e) => e.length)) === 2);
+  const chartText = await page.$eval(".sheet svg.chart", (e) => e.textContent);
+  check("play chart x-axis is 'turn' with after-turn tooltips",
+    chartText.includes("turn") && chartText.includes("after turn")
+    && !chartText.includes("boxes filled"));
   await page.mouse.click(195, 80);
   await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
 
@@ -378,7 +387,47 @@ async function newPage(opts = {}) {
   await ctx.close();
 }
 
-// ═══ 7. Reduced motion preference ═══════════════════════════════════════════
+// ═══ 7. Cache-busting update check ══════════════════════════════════════════
+// A stamped page whose build differs from version.json refreshes itself once,
+// keeping localStorage intact; matching builds never reload.
+{
+  const indexSrc = await readFile(join(DOCS, "index.html"), "utf8");
+  overrides.set("/index.html", indexSrc.replaceAll("__BUILD__", "buildA"));
+  overrides.set("/version.json", JSON.stringify({ build: "buildB" }));
+  indexHits = 0;
+
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  await ctx.addInitScript(() => {
+    if (!localStorage.getItem("test-marker")) localStorage.setItem("test-marker", "kept");
+  });
+  const page = await ctx.newPage();
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  // initial load + cache-priming fetch + reload = 3 index requests
+  await new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      if (indexHits >= 3) { clearInterval(iv); resolve(); }
+      else if (Date.now() - t0 > 6000) { clearInterval(iv); reject(new Error("page never self-refreshed")); }
+    }, 50);
+  }).catch((e) => check(e.message, false));
+  check("stale build self-refreshes (prime + reload)", indexHits >= 3);
+  await page.waitForFunction(() => document.getElementById("evValue") !== null);
+  check("one refresh attempt per build (guard set)",
+    await page.evaluate(() => sessionStorage.getItem("yacht-solver-reloaded-for")) === "buildB");
+  check("localStorage survives the refresh",
+    await page.evaluate(() => localStorage.getItem("test-marker")) === "kept");
+
+  // Matching build: no reload.
+  overrides.set("/version.json", JSON.stringify({ build: "buildA" }));
+  indexHits = 0;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(800);
+  check("matching build never reloads", indexHits === 1);
+  overrides.clear();
+  await ctx.close();
+}
+
+// ═══ 8. Reduced motion preference ═══════════════════════════════════════════
 {
   const { ctx, page } = await newPage({ reducedMotion: "reduce" });
   await page.click('#modeSeg button[data-mode="play"]');

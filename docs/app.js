@@ -547,7 +547,10 @@ function renderPlayAdvice(p) {
 }
 
 // ── Expected-points trajectory chart ────────────────────────────────────────
-function chartSVG(series) {
+// x is the number of completed turns — identical to "boxes filled" (turn n
+// ends with exactly n boxes banked). Play mode labels it "turn"; advisor
+// keeps "boxes filled" since manual card edits aren't necessarily turns.
+function chartSVG(series, xWord = "boxes filled") {
   const W = 340, H = 220, L = 38, R = 12, T = 16, B = 30;
   const all = series.flatMap((s) => Object.values(s.points));
   const yMax = Math.max(50, Math.ceil(Math.max(...all, 1) / 50) * 50);
@@ -575,20 +578,22 @@ function chartSVG(series) {
     marks += entries.map(([t, v], i) =>
       `<circle cx="${x(t)}" cy="${y(v)}" r="${i === entries.length - 1 ? 5 : 3.5}"
          class="c-dot" style="stroke:${s.color}${i === entries.length - 1 ? `;fill:${s.color}` : ""}">
-         <title>${s.label} · ${t} filled: ${v.toFixed(1)} pts left</title></circle>`
+         <title>${s.label} · ${xWord === "turn" ? `after turn ${t}` : `${t} filled`}: ${v.toFixed(1)} pts left</title></circle>`
     ).join("");
   }
 
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"
-    aria-label="Expected points left by number of boxes filled">
+    aria-label="Expected points left by ${xWord}">
     ${grid}${marks}
-    <text x="${(L + W - R) / 2}" y="${H - 2}" class="c-lbl" text-anchor="middle">boxes filled</text>
+    <text x="${(L + W - R) / 2}" y="${H - 2}" class="c-lbl" text-anchor="middle">${xWord}</text>
   </svg>`;
 }
 
 function openChartSheet() {
   if (!state.ready) return;
-  const series = mode === "advisor"
+  const inPlay = mode === "play";
+  const xWord = inPlay ? "turn" : "boxes filled";
+  const series = !inPlay
     ? [{ label: "You", color: PLAYER_COLORS[0], points: state.history }]
     : play.players.map((q, i) =>
         ({ label: `P${i + 1}`, color: PLAYER_COLORS[i], points: q.history }));
@@ -599,10 +604,10 @@ function openChartSheet() {
     ? `<div class="chart-legend">${series.map((s) =>
         `<span><i class="dot" style="background:${s.color}"></i>${s.label}</span>`).join("")}</div>`
     : "";
-  sheet.innerHTML = `<h3>Expected points left, by boxes filled</h3>
-    ${series.length ? chartSVG(series) : ""}${legend}
+  sheet.innerHTML = `<h3>Expected points left, by ${xWord}</h3>
+    ${series.length ? chartSVG(series, xWord) : ""}${legend}
     <p class="hint">${nPoints > 1
-      ? "Each dot is the expected remaining score at that point in the game. An optimal game starts at 191.8 with no boxes filled and glides to 0 as the card fills — a shallow step means that turn banked more than it cost."
+      ? `Each dot is the expected remaining score at that point in the game. An optimal game starts at 191.8 ${inPlay ? "before turn 1 and glides to 0 by turn 12" : "with no boxes filled and glides to 0 as the card fills"} — a shallow step means that turn banked more than it cost.`
       : "Fill some boxes and the trajectory of the game will build up here."}</p>`;
   $("sheetBackdrop").hidden = false;
 }
@@ -774,10 +779,34 @@ function load() {
   } catch (e) { /* corrupted storage — start fresh */ }
 }
 
+// ── Update check (cache busting) ────────────────────────────────────────────
+// Deploys stamp BUILD_VERSION into index.html and write version.json. If the
+// server has a newer build than the page we're running, force-refresh the
+// cached index once and reload — mobile browsers rarely get a manual hard
+// refresh. localStorage (game/advisor state, settings) is untouched.
+function checkForUpdate() {
+  const build = window.BUILD_VERSION;
+  if (!build || build === "__BUILD__") return;         // local / unstamped
+  fetch("version.json", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then(async (v) => {
+      if (!v || !v.build || v.build === build) return;
+      const guard = "yacht-solver-reloaded-for";
+      try {
+        if (sessionStorage.getItem(guard) === v.build) return;   // one attempt per build
+        sessionStorage.setItem(guard, v.build);
+      } catch (e) { return; }
+      await fetch(location.href, { cache: "reload" }).catch(() => {});
+      location.reload();
+    })
+    .catch(() => { /* offline etc. — current version keeps working */ });
+}
+
 // ── Boot ────────────────────────────────────────────────────────────────────
 load();
 render();
-fetch("v_table.bin")
+checkForUpdate();
+fetch(`v_table.bin?v=${encodeURIComponent(window.BUILD_VERSION || "dev")}`)
   .then((r) => {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.arrayBuffer();

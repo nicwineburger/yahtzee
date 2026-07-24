@@ -7,13 +7,16 @@
 <title>Yacht Dice Solver</title>
 <meta name="description" content="Optimal-play advisor for Yacht Dice (Clubhouse Games: 51 Worldwide Classics rules). Enter your scorecard and roll; get the best keep or box.">
 <script>
+  /* __BUILD__ is replaced with the commit SHA by the deploy workflow; locally
+     it stays as-is and the update check is skipped. */
+  window.BUILD_VERSION = "__BUILD__";
   /* Apply a forced theme before first paint to avoid a flash of wrong theme. */
   try {
     var t = localStorage.getItem("yacht-solver-theme");
     if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
   } catch (e) {}
 </script>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=__BUILD__">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='4' y='4' width='92' height='92' rx='20' fill='%231d3557'/%3E%3Ccircle cx='30' cy='30' r='11' fill='white'/%3E%3Ccircle cx='70' cy='30' r='11' fill='white'/%3E%3Ccircle cx='50' cy='50' r='11' fill='white'/%3E%3Ccircle cx='30' cy='70' r='11' fill='white'/%3E%3Ccircle cx='70' cy='70' r='11' fill='white'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -124,7 +127,7 @@
   <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
 </div>
 
-<script src="engine.js"></script>
-<script src="app.js"></script>
+<script src="engine.js?v=__BUILD__"></script>
+<script src="app.js?v=__BUILD__"></script>
 </body>
 </html>

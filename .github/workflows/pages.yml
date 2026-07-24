@@ -18,18 +18,17 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Official Playwright image: browsers + system deps preinstalled, no
+    # install step. The tag MUST match the playwright version in package.json.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - run: npm ci
       - name: Engine regression test vs Python-solver fixtures
         run: npm run test:engine
       - name: Engine property tests
         run: npm run test:engine-extra
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
       - name: UI tests (both modes, mobile viewport)
         run: npm run test:ui
 
@@ -53,6 +52,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Stamp build version for cache busting
+        run: |
+          SHA="${GITHUB_SHA::12}"
+          sed -i "s/__BUILD__/${SHA}/g" docs/index.html
+          printf '{"build":"%s"}\n' "$SHA" > docs/version.json
+          grep -q "$SHA" docs/index.html
       # enablement: true creates/enables the Pages site (build type "workflow")
       # on first run, so no manual Settings -> Pages step is needed.
       - uses: actions/configure-pages@v5
