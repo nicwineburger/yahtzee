@@ -35,6 +35,7 @@ const play = {
   over: false,
   animating: false,                   // transient: dice are mid-tumble
   rollingIdx: [],                     // which dice are tumbling
+  pick: null,                         // transient: pending box choice at score stage
 };
 
 const ANIM_KEY = "yacht-solver-anim";
@@ -214,14 +215,19 @@ function recordHistory(m, u) {
 }
 
 // Shared advice-card builders (handlers differ per mode).
-function scoreAdviceHTML(best, alts, stay) {
+function scoreAdviceHTML(best, alts, stay, opts = {}) {
+  const buttonLabel = opts.buttonLabel
+    || (stay === "Score" ? "Apply &amp; next turn" : "Score it");
+  const altSummary = opts.altAction === "pick"
+    ? "Other options — tap to pick instead" : "Other options — tap to score instead";
   return `
     <div class="advice-main">
       <p class="advice-title">${stay} <u>${best.name}</u> for
         <span class="pts">${best.pts} pts</span>${best.crossed ? " · locks the +35 bonus" : ""}</p>
+      ${opts.chipHTML || ""}
       <p class="advice-sub">Expected final haul from here: ${fmt(best.ev)} pts</p>
-      <button class="apply-btn" id="adviceApplyBtn">${stay === "Score" ? "Apply &amp; next turn" : "Score it"}</button>
-      ${alts.length ? `<details class="more"><summary>Other options — tap to score instead</summary>
+      <button class="apply-btn" id="adviceApplyBtn">${buttonLabel}</button>
+      ${alts.length ? `<details class="more"><summary>${altSummary}</summary>
         <ul class="alts">${alts.map((a, i) =>
           `<li><button class="alt-btn" data-alt="${i}">
              <span class="what">${a.name} · ${a.pts} pts</span>
@@ -336,6 +342,7 @@ function playRoll() {
     }
   }
   play.rollsUsed++;
+  play.pick = null;
   if (!anim.on) { autoHoldAdvice(); render(); return; }
 
   // Tumble: the outcome above is already committed; we just scramble the
@@ -399,9 +406,44 @@ function playScore(cat) {
   play.dice = [];
   play.held = Array(5).fill(false);
   play.rollsUsed = 0;
+  play.pick = null;
   if (play.players.every((q) => pFilled(q) === 12)) play.over = true;
   else play.current = (play.current + 1) % play.players.length;
   render();
+}
+
+// Which dice count toward a box's score for the current roll. Sum-scored
+// boxes (Choice/4K/FH/Yacht) use all five dice; straights use one die per
+// face of the run; upper boxes use the matching faces; a zero box uses none.
+function contributingDice(dice, cat) {
+  const pts = E.SCORES[E.diceValuesToIdx(dice)][cat];
+  if (!pts) return dice.map(() => false);
+  if (cat < 6) return dice.map((f) => f === cat + 1);
+  if (cat === 9 || cat === 10) {
+    const have = new Set(dice);
+    const runs = cat === 10
+      ? [[1, 2, 3, 4, 5], [2, 3, 4, 5, 6]]
+      : [[1, 2, 3, 4], [2, 3, 4, 5], [3, 4, 5, 6]];
+    const run = runs.find((r) => r.every((f) => have.has(f))) || [];
+    const used = new Set();
+    return dice.map((f) => {
+      if (run.includes(f) && !used.has(f)) { used.add(f); return true; }
+      return false;
+    });
+  }
+  return dice.map(() => true);
+}
+
+// At a score-stage advice state (final roll, or stand-pat), the pending box
+// choice: the recommendation by default, or the player's override.
+function scorePickInfo(adv) {
+  if (!play.adviceOn || !adv) return null;
+  if (adv.kind !== "score" && !(adv.kind === "keep" && adv.best.nKept === 5)) return null;
+  const best = adv.kind === "score" ? adv.best : adv.best.thenScore;
+  const ranking = adv.kind === "score" ? adv.alternatives : adv.boxRanking;
+  const pick = play.pick !== null && ranking.some((r) => r.cat === play.pick)
+    ? play.pick : best.cat;
+  return { best, ranking, pick, pickRow: ranking.find((r) => r.cat === pick) };
 }
 
 function playStandingsSorted() {
@@ -447,26 +489,36 @@ function renderPlay() {
   ).join("");
   st.hidden = play.players.length < 2;
 
-  // Dice + roll button. When advice is on and the current holds deviate from
-  // the recommended keep, held dice render amber (matching the override chip)
-  // instead of the usual blue.
+  // Dice + roll button. With advice on: at keep stages, holds that deviate
+  // from the recommended keep render amber (matching the override chip); at
+  // the score stage the dice contributing to the pending box choice render
+  // blue (recommended) or amber (overridden pick) instead of hold state.
   const adv = has && state.ready && !play.over && !play.animating && play.rollsUsed > 0
     ? E.advise({ mask: pMask(p), upper: pCappedUpper(p),
                  dice: play.dice, rerollsLeft: 3 - play.rollsUsed })
     : null;
   const deviating = !!(play.adviceOn && adv && adv.kind === "keep"
     && adv.best.nKept < 5 && overrideChipHTML(adv) !== "");
+  const pickInfo = scorePickInfo(adv);
+  const contrib = pickInfo ? contributingDice(play.dice, pickInfo.pick) : null;
+  const pickDeviates = pickInfo && pickInfo.pick !== pickInfo.best.cat;
 
   const row = $("playDiceRow");
   row.innerHTML = "";
   for (let i = 0; i < 5; i++) {
     if (has && play.rollsUsed > 0 && !play.over) {
       const rolling = play.animating && play.rollingIdx.includes(i);
+      let cls = "die" + (rolling ? " rolling" : "");
+      if (pickInfo) {
+        cls += (contrib[i] ? " kept" : "") + (contrib[i] && pickDeviates ? " deviate" : "");
+      } else {
+        cls += (play.held[i] ? " kept" : "") + (play.held[i] && deviating ? " deviate" : "");
+      }
       const b = document.createElement("button");
-      b.className = "die" + (play.held[i] ? " kept" : "") + (rolling ? " rolling" : "")
-        + (play.held[i] && deviating ? " deviate" : "");
+      b.className = cls;
       b.innerHTML = dieSVG(play.dice[i], 52);
       b.setAttribute("aria-label", rolling ? "Die rolling" :
+        pickInfo ? `Die ${play.dice[i]}${contrib[i] ? ", counts toward the picked box" : ""}` :
         `Die ${play.dice[i]}, ${play.held[i] ? "held" : "not held"} — tap to toggle`);
       b.onclick = () => playToggleHold(i);
       row.appendChild(b);
@@ -497,7 +549,9 @@ function renderPlay() {
         ? `Roll to start ${play.players.length > 1 ? p.name + "'s" : "your"} turn.`
         : play.rollsUsed < 3
           ? "Tap dice to hold them, then reroll — or bank the roll into an open box below."
-          : "Final roll — tap an open box below to score it.";
+          : pickInfo
+            ? "Final roll — tap the highlighted box again to bank it, or tap another to pick it instead."
+            : "Final roll — tap an open box below to score it.";
   }
 
   // Scorecard
@@ -511,14 +565,22 @@ function renderPlay() {
     for (let c = 0; c < 12; c++) {
       const filled = p.boxes[c] !== null;
       const scoreable = !filled && previewIdx !== null;
+      const picked = pickInfo && pickInfo.pick === c;
       const b = document.createElement("button");
-      b.className = "box" + (filled ? " filled" : "") + (scoreable ? " scoreable" : "");
+      b.className = "box" + (filled ? " filled" : "") + (scoreable ? " scoreable" : "")
+        + (picked ? " picked" + (pickDeviates ? " pick-deviate" : "") : "");
       const val = filled ? p.boxes[c]
         : scoreable ? `+${E.SCORES[previewIdx][c]}` : "–";
       b.innerHTML = `<span class="name">${E.CATEGORY_NAMES[c]}</span>` +
                     `<span class="val">${val}</span>`;
       b.disabled = !scoreable;
-      if (scoreable) b.onclick = () => playScore(c);
+      if (scoreable) {
+        // With a pending pick, the first tap on another box moves the pick;
+        // tapping the picked box banks it. Without advice: instant scoring.
+        b.onclick = pickInfo
+          ? () => { if (pickInfo.pick === c) playScore(c); else { play.pick = c; render(); } }
+          : () => playScore(c);
+      }
       (c < 6 ? up : lo).appendChild(b);
     }
     $("playBonusLine").innerHTML = bonusLineHTML(pUpper(p)) +
@@ -550,13 +612,21 @@ function renderPlayAdvice(p) {
   body.className = "";
 
   if (adv.kind === "score" || (adv.kind === "keep" && adv.best.nKept === 5)) {
-    const best = adv.kind === "score" ? adv.best : adv.best.thenScore;
-    const alts = (adv.kind === "score" ? adv.alternatives : adv.boxRanking).slice(1, 5);
+    const info = scorePickInfo(adv);
+    const { best, pick, pickRow } = info;
+    const alts = info.ranking.slice(1, 5);
     const stay = adv.kind === "keep" ? "Stop rolling — score" : "Score";
-    body.innerHTML = scoreAdviceHTML(best, alts, stay);
-    $("adviceApplyBtn").onclick = () => playScore(best.cat);
+    const chip = pick !== best.cat
+      ? `<span class="over-chip">Your pick: ${pickRow.name} · −${fmt(best.ev - pickRow.ev)} pts</span>`
+      : "";
+    body.innerHTML = scoreAdviceHTML(best, alts, stay, {
+      chipHTML: chip,
+      buttonLabel: pick === best.cat ? null : `Score ${pickRow.name} for ${pickRow.pts} pts`,
+      altAction: "pick",
+    });
+    $("adviceApplyBtn").onclick = () => playScore(pick);
     body.querySelectorAll(".alt-btn").forEach((b) => {
-      b.onclick = () => playScore(alts[Number(b.dataset.alt)].cat);
+      b.onclick = () => { play.pick = alts[Number(b.dataset.alt)].cat; render(); };
     });
     return;
   }

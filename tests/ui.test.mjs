@@ -121,6 +121,13 @@ async function newPage(opts = {}) {
     els.reduce((a, e) => a + Number(e.textContent), 0));
   check(`bonus line shows upper total ${upperSum} after setting Fives=15`,
     (await page.textContent("#bonusLine")).includes(`Upper total ${upperSum}`));
+  check("bonus/total line sits above the board (both scorecards)",
+    await page.evaluate(() => {
+      const above = (line, board) =>
+        !!(line.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return above(document.getElementById("bonusLine"), document.getElementById("upperCol"))
+        && above(document.getElementById("playBonusLine"), document.getElementById("playUpperCol"));
+    }));
   await ctx.close();
 }
 
@@ -317,6 +324,43 @@ async function newPage(opts = {}) {
       && (await page.$$eval("#playDiceRow .die.deviate", (e) => e.length)) === 0
       && (await held()).filter(Boolean).length === kept);
   }
+
+  // Score-stage pick: after the final roll the recommended box is pre-picked
+  // (blue), contributing dice highlighted; tapping another box moves the pick
+  // (amber + chip), tapping the picked box banks it.
+  while (!(await page.$eval("#rollBtn", (b) => b.disabled || b.hidden))) {
+    await page.click("#rollBtn");
+  }
+  await page.waitForSelector(".box.picked");
+  check("recommended box pre-picked in blue",
+    (await page.$(".box.picked.pick-deviate")) === null);
+  const recName = await page.$eval(".box.picked .name", (e) => e.textContent);
+  const recPts = await page.$eval(".box.picked .val", (e) => Number(e.textContent.replace("+", "")));
+  if (recPts > 0) {
+    check("contributing dice highlighted for the recommended box",
+      (await page.$$eval("#playDiceRow .die.kept", (e) => e.length)) > 0
+      && (await page.$$eval("#playDiceRow .die.deviate", (e) => e.length)) === 0);
+  }
+  const otherBox = await page.$$eval(".box.scoreable", (els) => {
+    const el = els.find((e) => !e.classList.contains("picked"));
+    return el ? el.querySelector(".name").textContent : null;
+  });
+  await page.$$eval(".box.scoreable", (els) =>
+    els.find((e) => !e.classList.contains("picked")).click());
+  await page.waitForSelector(".box.picked.pick-deviate");
+  check(`picking "${otherBox}" turns the pick amber with a priced chip`,
+    (await page.$eval(".box.picked .name", (e) => e.textContent)) === otherBox
+    && (await page.textContent(".over-chip")).includes("Your pick:"));
+  check("button follows the override pick",
+    (await page.textContent("#adviceApplyBtn")).startsWith(`Score ${otherBox}`));
+  await page.$$eval(".box.scoreable", (els, name) =>
+    els.find((e) => e.querySelector(".name").textContent === name).click(), recName);
+  check("re-picking the recommendation clears the amber",
+    (await page.$(".box.picked.pick-deviate")) === null
+    && (await page.$(".over-chip")) === null);
+  await page.$$eval(".box.picked", (els) => els[0].click());   // second tap banks
+  check("tapping the picked box again banks it",
+    (await page.$$eval("#playDiceRow .die", (e) => e.length)) === 0);
 
   // Full seeded 2-player game: roll to the final roll, score the advised box.
   for (let guard = 0; guard < 140; guard++) {
