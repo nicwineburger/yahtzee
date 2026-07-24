@@ -230,7 +230,7 @@ function scoreAdviceHTML(best, alts, stay) {
     </div>`;
 }
 
-function keepAdviceHTML(best, alts, dice, applyLabel) {
+function keepAdviceHTML(best, alts, dice, applyLabel, chipHTML = "") {
   const n = best.nKept;
   const title = n === 0
     ? "Reroll everything"
@@ -238,6 +238,7 @@ function keepAdviceHTML(best, alts, dice, applyLabel) {
   return `
     <div class="advice-main">
       <p class="advice-title">${title}</p>
+      ${chipHTML}
       ${adviceDiceHTML(best.keepVec, dice)}
       <p class="advice-sub">Expected final haul from here: ${fmt(best.ev)} pts</p>
       <button class="apply-btn" id="adviceApplyBtn">${applyLabel}</button>
@@ -469,12 +470,6 @@ function renderPlay() {
           ? "Tap dice to hold them, then reroll — or bank the roll into an open box below."
           : "Final roll — tap an open box below to score it.";
   }
-  $("adviceToggle").checked = play.adviceOn;
-  $("animToggle").checked = anim.on;
-  $("animSpeedSeg").hidden = !anim.on;
-  document.querySelectorAll("#animSpeedSeg button").forEach((b) => {
-    b.classList.toggle("on", b.dataset.speed === anim.speed);
-  });
 
   // Scorecard
   $("playCardTitle").textContent = has
@@ -539,11 +534,28 @@ function renderPlayAdvice(p) {
 
   const best = adv.best;
   const alts = adv.alternatives.slice(1, 4);
-  body.innerHTML = keepAdviceHTML(best, alts, play.dice, "Hold these for me");
+  body.innerHTML = keepAdviceHTML(best, alts, play.dice, "Hold these for me",
+    overrideChipHTML(adv));
   $("adviceApplyBtn").onclick = () => playHoldKeep(best.keepVec);
   body.querySelectorAll(".alt-btn").forEach((b) => {
     b.onclick = () => playHoldKeep(alts[Number(b.dataset.alt)].keepVec);
   });
+}
+
+// Treatment "B": when the player's holds differ from the recommended keep,
+// show an amber chip with their hold and its EV cost. Only once they've
+// actually held something — untouched dice aren't a decision yet.
+function overrideChipHTML(adv) {
+  const heldVals = play.dice.filter((f, i) => play.held[i]);
+  if (!heldVals.length) return "";
+  const heldVec = [0, 0, 0, 0, 0, 0];
+  heldVals.forEach((f) => heldVec[f - 1]++);
+  if (adv.best.keepVec.every((c, f) => c === heldVec[f])) return "";
+  const row = adv.alternatives.find((r) => r.keepVec.every((c, f) => c === heldVec[f]));
+  if (!row) return "";
+  const cost = adv.best.ev - row.ev;
+  return `<span class="over-chip">Your hold: ${heldVals.slice().sort().join(" · ")}
+    &nbsp;·&nbsp; −${fmt(cost)} pts</span>`;
 }
 
 // ── Expected-points trajectory chart ────────────────────────────────────────
@@ -648,7 +660,64 @@ function openPlayNewSheet() {
   $("sheetBackdrop").hidden = false;
 }
 
-function closeSheet() { $("sheetBackdrop").hidden = true; }
+function openSettingsSheet() {
+  $("settingsBtn").classList.add("open");
+  const sheet = $("sheet");
+  sheet.innerHTML = `<h3>Settings</h3>
+    <div class="set-rows">
+      ${mode === "play" ? `<label class="advice-switch"><input type="checkbox"
+        id="adviceToggle" ${play.adviceOn ? "checked" : ""}>
+        Show optimal-play advice</label>` : ""}
+      <label class="advice-switch"><input type="checkbox" id="animToggle"
+        ${anim.on ? "checked" : ""}>
+        Roll animation</label>
+      <div class="set-line" id="animSpeedRow" ${anim.on ? "" : "hidden"}>
+        <span class="set-label">Speed</span>
+        <div class="seg" id="animSpeedSeg" role="radiogroup" aria-label="Animation speed">
+          ${["slow", "normal", "fast"].map((s) =>
+            `<button data-speed="${s}"${s === anim.speed ? ' class="on"' : ""}>
+             ${s[0].toUpperCase() + s.slice(1)}</button>`).join("")}
+        </div>
+      </div>
+      <div class="set-line">
+        <span class="set-label">Theme</span>
+        <div class="seg" id="themeSeg" role="radiogroup" aria-label="Color theme">
+          ${["auto", "dark", "light"].map((t) =>
+            `<button data-theme="${t}"${t === currentTheme() ? ' class="on"' : ""}>
+             ${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
+        </div>
+      </div>
+    </div>`;
+
+  const adviceEl = sheet.querySelector("#adviceToggle");
+  if (adviceEl) adviceEl.onchange = (e) => { play.adviceOn = e.target.checked; render(); };
+  sheet.querySelector("#animToggle").onchange = (e) => {
+    anim.on = e.target.checked;
+    sheet.querySelector("#animSpeedRow").hidden = !anim.on;
+    render();
+  };
+  sheet.querySelectorAll("#animSpeedSeg button").forEach((b) => {
+    b.onclick = () => {
+      anim.speed = b.dataset.speed;
+      sheet.querySelectorAll("#animSpeedSeg button").forEach((x) =>
+        x.classList.toggle("on", x === b));
+      render();
+    };
+  });
+  sheet.querySelectorAll("#themeSeg button").forEach((b) => {
+    b.onclick = () => {
+      applyTheme(b.dataset.theme);
+      sheet.querySelectorAll("#themeSeg button").forEach((x) =>
+        x.classList.toggle("on", x === b));
+    };
+  });
+  $("sheetBackdrop").hidden = false;
+}
+
+function closeSheet() {
+  $("sheetBackdrop").hidden = true;
+  $("settingsBtn").classList.remove("open");
+}
 $("sheetBackdrop").addEventListener("click", (e) => {
   if (e.target === $("sheetBackdrop")) closeSheet();
 });
@@ -684,21 +753,12 @@ $("resetBtn").onclick = () => {
 
 $("playNewBtn").onclick = openPlayNewSheet;
 $("rollBtn").onclick = playRoll;
-$("adviceToggle").onchange = (e) => { play.adviceOn = e.target.checked; render(); };
-$("animToggle").onchange = (e) => { anim.on = e.target.checked; render(); };
-document.querySelectorAll("#animSpeedSeg button").forEach((b) => {
-  b.onclick = () => { anim.speed = b.dataset.speed; render(); };
-});
+$("settingsBtn").onclick = openSettingsSheet;
 
 $("evChip").onclick = openChartSheet;
 
-// ── Theme toggle: auto (follow system) -> dark -> light ─────────────────────
+// ── Theme (selected in the settings sheet) ──────────────────────────────────
 const THEME_KEY = "yacht-solver-theme";
-const THEME_META = {
-  auto: { icon: "◐", label: "follows your system" },
-  dark: { icon: "☾", label: "dark" },
-  light: { icon: "☀", label: "light" },
-};
 
 function currentTheme() {
   const t = document.documentElement.dataset.theme;
@@ -712,16 +772,7 @@ function applyTheme(t) {
     if (t === "auto") localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, t);
   } catch (e) { /* private mode — theme just won't persist */ }
-  const btn = $("themeBtn");
-  btn.textContent = THEME_META[t].icon;
-  btn.title = `Theme: ${THEME_META[t].label} — tap to change`;
 }
-
-$("themeBtn").onclick = () => {
-  const order = ["auto", "dark", "light"];
-  applyTheme(order[(order.indexOf(currentTheme()) + 1) % order.length]);
-};
-applyTheme(currentTheme());
 
 // ── Persistence ─────────────────────────────────────────────────────────────
 function save() {

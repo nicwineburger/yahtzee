@@ -64,6 +64,15 @@ const check = (label, cond) => {
 
 const MOBILE = { width: 390, height: 844 };
 
+// Open the gear settings sheet, run fn, close via backdrop.
+async function withSettings(page, fn) {
+  await page.click("#settingsBtn");
+  await page.waitForSelector(".sheet .set-rows");
+  await fn();
+  await page.mouse.click(195, 60);
+  await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
+}
+
 async function newPage(opts = {}) {
   const ctx = await browser.newContext({
     viewport: MOBILE, isMobile: true, hasTouch: true, ...opts,
@@ -182,12 +191,26 @@ async function newPage(opts = {}) {
   await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
 
   check("auto theme follows dark system", (await bodyBg()) === "rgb(20, 22, 27)");
-  await page.click("#themeBtn");                   // forced dark
-  await page.click("#themeBtn");                   // forced light
+  await page.click("#settingsBtn");
+  await page.waitForSelector(".sheet .set-rows");
+  check("gear animates open", await page.$eval("#settingsBtn", (b) => b.classList.contains("open")));
+  check("advisor-mode settings omit the play-only advice toggle",
+    (await page.$(".sheet #adviceToggle")) === null);
+  check("settings default: theme Auto selected",
+    await page.$eval('#themeSeg button[data-theme="auto"]', (b) => b.classList.contains("on")));
+  await page.click('#themeSeg button[data-theme="light"]');
   check("forced light overrides dark system pref", (await bodyBg()) === "rgb(244, 245, 247)");
+  await page.mouse.click(195, 60);
+  await page.waitForSelector(".sheet-backdrop", { state: "hidden" });
+  check("gear animation resets on close",
+    !(await page.$eval("#settingsBtn", (b) => b.classList.contains("open"))));
   await page.reload({ waitUntil: "networkidle" });
   check("theme choice persists", (await bodyBg()) === "rgb(244, 245, 247)");
-  await page.click("#themeBtn");                   // back to auto
+  await withSettings(page, async () => {
+    check("persisted theme selected in settings",
+      await page.$eval('#themeSeg button[data-theme="light"]', (b) => b.classList.contains("on")));
+    await page.click('#themeSeg button[data-theme="auto"]');
+  });
   check("auto restores system theme", (await bodyBg()) === "rgb(20, 22, 27)");
   await ctx.close();
 }
@@ -209,10 +232,12 @@ async function newPage(opts = {}) {
   await page.click('.sheet button[data-n="2"]');
   check("round 1, player 1", (await page.textContent("#playTurnInfo")).includes("Round 1/12 — Player 1"));
   // Disable the roll animation so dice values can be read immediately.
-  await page.click("#animToggle");
-  check("animation toggle off hides the speed control",
-    !(await page.$eval("#animToggle", (e) => e.checked))
-    && await page.$eval("#animSpeedSeg", (e) => e.hidden));
+  await withSettings(page, async () => {
+    await page.click("#animToggle");
+    check("animation toggle off hides the speed control",
+      !(await page.$eval("#animToggle", (e) => e.checked))
+      && await page.$eval("#animSpeedRow", (e) => e.hidden));
+  });
 
   // Roll / hold / reroll mechanics
   await page.click("#rollBtn");
@@ -246,7 +271,10 @@ async function newPage(opts = {}) {
   check("scoring rotates to player 2", (await page.textContent("#playTurnInfo")).includes("Player 2"));
 
   // Advice overlay: placement + hold-for-me
-  await page.click(".advice-switch");
+  await withSettings(page, async () => {
+    check("advice defaults off", !(await page.$eval("#adviceToggle", (e) => e.checked)));
+    await page.click("#adviceToggle");
+  });
   check("advice card sits between round card and scorecard",
     await page.evaluate(() => {
       const a = document.getElementById("advice");
@@ -261,6 +289,19 @@ async function newPage(opts = {}) {
     await page.click("#adviceApplyBtn");
     const kept = (await held()).filter(Boolean).length;
     check("'Hold these for me' sets holds", kept > 0 && kept < 6);
+
+    // Override chip: holds matching the recommendation show no chip; deviating
+    // (holding one extra die) shows the amber chip with the EV cost.
+    check("no override chip when holds match advice", (await page.$(".over-chip")) === null);
+    const extraDie = await page.$$eval("#playDiceRow .die", (els) =>
+      els.findIndex((e) => !e.classList.contains("kept")) + 1);
+    await page.click(`#playDiceRow .die:nth-child(${extraDie})`);
+    await page.waitForSelector(".over-chip");
+    const chipText = await page.textContent(".over-chip");
+    check("deviating holds show the override chip with EV cost",
+      chipText.includes("Your hold:") && /−\d+\.\d+\s*pts/.test(chipText.replace(/\s+/g, " ")));
+    await page.click(`#playDiceRow .die:nth-child(${extraDie})`);
+    check("chip clears when holds match again", (await page.$(".over-chip")) === null);
   }
 
   // Full seeded 2-player game: roll to the final roll, score the advised box.
@@ -319,10 +360,12 @@ async function newPage(opts = {}) {
   await page.waitForSelector('.sheet button[data-n="1"]');
   await page.click('.sheet button[data-n="1"]');
 
-  check("animation defaults on with speed control visible (Normal)",
-    await page.$eval("#animToggle", (e) => e.checked)
-    && !(await page.$eval("#animSpeedSeg", (e) => e.hidden))
-    && await page.$eval('#animSpeedSeg button[data-speed="normal"]', (b) => b.classList.contains("on")));
+  await withSettings(page, async () => {
+    check("animation defaults on with speed control visible (Normal)",
+      await page.$eval("#animToggle", (e) => e.checked)
+      && !(await page.$eval("#animSpeedRow", (e) => e.hidden))
+      && await page.$eval('#animSpeedSeg button[data-speed="normal"]', (b) => b.classList.contains("on")));
+  });
 
   await page.click("#rollBtn");
   check("dice tumble during the roll", (await page.$$eval(".die.rolling", (e) => e.length)) === 5);
@@ -335,13 +378,13 @@ async function newPage(opts = {}) {
     && await page.$eval("#rollBtn", (b) => !b.disabled));
 
   // Speed control: fast settles well before slow's duration.
-  await page.click('#animSpeedSeg button[data-speed="fast"]');
+  await withSettings(page, () => page.click('#animSpeedSeg button[data-speed="fast"]'));
   await page.click("#playDiceRow .die:nth-child(1)");   // hold one die
   await page.click("#rollBtn");
   check("held die does not tumble", (await page.$$eval(".die.rolling", (e) => e.length)) === 4);
   await page.waitForTimeout(700);                        // fast = 400ms
   check("fast roll settled by 700ms", (await page.$$eval(".die.rolling", (e) => e.length)) === 0);
-  await page.click('#animSpeedSeg button[data-speed="slow"]');
+  await withSettings(page, () => page.click('#animSpeedSeg button[data-speed="slow"]'));
   await page.click("#rollBtn");
   await page.waitForTimeout(900);                        // slow = 1400ms
   check("slow roll still tumbling at 900ms", (await page.$$eval(".die.rolling", (e) => e.length)) > 0);
@@ -350,12 +393,16 @@ async function newPage(opts = {}) {
   // Settings persist.
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForFunction(() => document.getElementById("evValue").textContent !== "–");
-  check("speed choice persists (slow)",
-    await page.$eval('#animSpeedSeg button[data-speed="slow"]', (b) => b.classList.contains("on")));
-  await page.click("#animToggle");
+  await withSettings(page, async () => {
+    check("speed choice persists (slow)",
+      await page.$eval('#animSpeedSeg button[data-speed="slow"]', (b) => b.classList.contains("on")));
+    await page.click("#animToggle");
+  });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForFunction(() => document.getElementById("evValue").textContent !== "–");
-  check("animation off persists", !(await page.$eval("#animToggle", (e) => e.checked)));
+  await withSettings(page, async () => {
+    check("animation off persists", !(await page.$eval("#animToggle", (e) => e.checked)));
+  });
   await ctx.close();
 }
 
@@ -378,7 +425,7 @@ async function newPage(opts = {}) {
   await page.click("#playNewBtn");
   await page.waitForSelector('.sheet button[data-n="1"]');
   await page.click('.sheet button[data-n="1"]');
-  await page.click(".advice-switch");
+  await withSettings(page, () => page.click("#adviceToggle"));
   const yBefore = (await box("#playScoreSection")).y;
   await page.click("#rollBtn");                       // animation on: "Rolling…"
   check("scorecard fixed while dice tumble",
@@ -434,8 +481,10 @@ async function newPage(opts = {}) {
 {
   const { ctx, page } = await newPage({ reducedMotion: "reduce" });
   await page.click('#modeSeg button[data-mode="play"]');
-  check("prefers-reduced-motion defaults the animation off",
-    !(await page.$eval("#animToggle", (e) => e.checked)));
+  await withSettings(page, async () => {
+    check("prefers-reduced-motion defaults the animation off",
+      !(await page.$eval("#animToggle", (e) => e.checked)));
+  });
   await ctx.close();
 }
 
