@@ -667,10 +667,17 @@ function overrideChipHTML(adv) {
 // keeps "boxes filled" since manual card edits aren't necessarily turns.
 function chartSVG(series, xWord = "boxes filled") {
   const W = 340, H = 220, L = 38, R = 12, T = 16, B = 30;
+  const ev0 = E.stateValue(0, 0);
   const all = series.flatMap((s) => Object.values(s.points));
-  const yMax = Math.max(50, Math.ceil(Math.max(...all, 1) / 50) * 50);
+  const yMax = Math.max(50, Math.ceil(Math.max(...all, ev0, 1) / 50) * 50);
   const x = (t) => L + (t / 12) * (W - L - R);
   const y = (v) => T + (1 - v / yMax) * (H - T - B);
+
+  // Optimal glide path: the exact starting EV at (0, ev0) straight down to
+  // (12, 0) — not the true E[V(state_t)] trajectory, just the two endpoints
+  // a player's own line can be compared against at a glance.
+  const refLine = `<line x1="${x(0)}" y1="${y(ev0)}" x2="${x(12)}" y2="${y(0)}" class="c-ref">
+    <title>Optimal glide path — points left under optimal play</title></line>`;
 
   let grid = "";
   for (let v = 0; v <= yMax; v += 50) {
@@ -699,7 +706,7 @@ function chartSVG(series, xWord = "boxes filled") {
 
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"
     aria-label="Expected points left by ${xWord}">
-    ${grid}${marks}
+    ${grid}${refLine}${marks}
     <text x="${(L + W - R) / 2}" y="${H - 2}" class="c-lbl" text-anchor="middle">${xWord}</text>
   </svg>`;
 }
@@ -722,7 +729,7 @@ function openChartSheet() {
   sheet.innerHTML = `<h3>Expected points left, by ${xWord}</h3>
     ${series.length ? chartSVG(series, xWord) : ""}${legend}
     <p class="hint">${nPoints > 1
-      ? `Each dot is the expected remaining score at that point in the game. An optimal game starts at 191.8 ${inPlay ? "before turn 1 and glides to 0 by turn 12" : "with no boxes filled and glides to 0 as the card fills"} — a shallow step means that turn banked more than it cost.`
+      ? `Each dot is the expected remaining score at that point in the game. The dashed line is the optimal glide path: it starts at ${fmt(E.stateValue(0, 0))} ${inPlay ? "before turn 1 and glides to 0 by turn 12" : "with no boxes filled and glides to 0 as the card fills"} — a shallow step means that turn banked more than it cost.`
       : "Fill some boxes and the trajectory of the game will build up here."}</p>`;
   $("sheetBackdrop").hidden = false;
 }

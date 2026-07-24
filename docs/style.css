@@ -320,6 +320,8 @@ details.more summary {
 .c-lbl { fill: var(--muted); font-size: 10px; }
 .c-line { fill: none; stroke: var(--accent); stroke-width: 2.5;
   stroke-linejoin: round; stroke-linecap: round; }
+.c-ref { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3;
+  opacity: 0.6; }
 .c-dot { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
 .c-dot.last { fill: var(--accent); }
 
