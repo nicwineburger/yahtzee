@@ -148,6 +148,11 @@ cat >"$TARGET/TEMPLATE_SETUP.md" <<'EOF'
    opens PRs with the workflow token and fails without it. API equivalent:
    `gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow -f
    default_workflow_permissions=read -F can_approve_pull_request_reviews=true`
+9. Optional `WORKFLOWS_PAT` repo secret (fine-grained PAT with contents +
+   workflows write): lets the implement job push changes that touch
+   `.github/workflows/**` — the Actions token cannot (GitHub platform
+   restriction). Without it, such issues fail fast with guidance to use the
+   local /issue-flow instead.
 
 Day-to-day: see `scripts/automation/README.md` and the Claude Code skills in
 `.claude/skills/` (issue-flow, expand-issue, pr-fix, release, tdd).

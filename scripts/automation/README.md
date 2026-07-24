@@ -127,7 +127,11 @@ that periodically scans for new issues/mentions and runs the same skills.
 The `implement` job additionally requires the repo setting **Settings →
 Actions → General → "Allow GitHub Actions to create and approve pull
 requests"** (off by default; the job opens PRs with the workflow token and
-fails at `gh pr create` without it).
+fails at `gh pr create` without it). Changes touching `.github/workflows/**`
+cannot be pushed by the Actions token at all (platform restriction): the job
+fails fast with guidance unless an optional `WORKFLOWS_PAT` secret
+(fine-grained PAT, contents + workflows write) is configured — otherwise run
+such issues through the local `/issue-flow`.
 
 ## Template export
 
