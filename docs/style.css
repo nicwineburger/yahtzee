@@ -121,8 +121,15 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em;
 }
 
 /* ── Advice ── */
-#advice { border-left: 4px solid var(--accent); }
-.advice-empty { color: var(--muted); font-size: 14.5px; padding: 4px 2px; }
+/* The card's content swaps between a one-line prompt and full advice many
+   times per turn; a reserved height keeps the cards below it from jumping. */
+#advice { border-left: 4px solid var(--accent); min-height: 224px; display: flex; }
+#adviceBody { width: 100%; }
+.advice-empty {
+  color: var(--muted); font-size: 14.5px; padding: 4px 2px;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; min-height: 100%;
+}
 .advice-main { display: flex; flex-direction: column; gap: 10px; }
 .advice-title { font-size: 17px; font-weight: 700; margin: 0; }
 .advice-title .pts { color: var(--good); }
@@ -198,6 +205,8 @@ details.more summary {
 .stand.on { background: var(--keep); color: var(--ink); border-color: var(--keep-line); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .roll-btn { width: 100%; margin-top: 12px; }
+/* Reserve two lines so hint changes don't nudge the controls below. */
+#playHint { min-height: 36px; }
 .roll-btn:disabled { opacity: 0.45; cursor: default; }
 .roll-btn[hidden] { display: none; }
 .advice-switch {

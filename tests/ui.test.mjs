@@ -347,7 +347,38 @@ async function newPage(opts = {}) {
   await ctx.close();
 }
 
-// ═══ 6. Reduced motion preference ═══════════════════════════════════════════
+// ═══ 6. Layout stability ════════════════════════════════════════════════════
+// Advice-card content churn (prompt <-> full advice <-> "Rolling…") must not
+// move the cards below it.
+{
+  const { ctx, page } = await newPage();
+  const box = (sel) => page.locator(sel).boundingBox();
+
+  // Advisor: empty prompt vs full advice, same card height.
+  const hEmpty = (await box("#advice")).height;
+  for (const f of [3, 3, 5, 2, 6]) await page.click(`#dicePad button[data-face="${f}"]`);
+  await page.waitForSelector(".advice-title");
+  check("advisor: advice card height stable prompt -> keep advice",
+    Math.abs((await box("#advice")).height - hEmpty) < 1);
+
+  // Play mode with advice on: scorecard must not move while rolling settles.
+  await page.click('#modeSeg button[data-mode="play"]');
+  await page.click("#playNewBtn");
+  await page.waitForSelector('.sheet button[data-n="1"]');
+  await page.click('.sheet button[data-n="1"]');
+  await page.click(".advice-switch");
+  const yBefore = (await box("#playScoreSection")).y;
+  await page.click("#rollBtn");                       // animation on: "Rolling…"
+  check("scorecard fixed while dice tumble",
+    Math.abs((await box("#playScoreSection")).y - yBefore) < 1);
+  await page.waitForSelector(".die.rolling", { state: "detached", timeout: 2500 });
+  await page.waitForSelector("#adviceApplyBtn");
+  check("scorecard fixed after advice renders",
+    Math.abs((await box("#playScoreSection")).y - yBefore) < 1);
+  await ctx.close();
+}
+
+// ═══ 7. Reduced motion preference ═══════════════════════════════════════════
 {
   const { ctx, page } = await newPage({ reducedMotion: "reduce" });
   await page.click('#modeSeg button[data-mode="play"]');
