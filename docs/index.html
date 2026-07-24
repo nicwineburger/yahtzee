@@ -70,10 +70,12 @@
 
   <section class="card">
     <div class="section-head">
-      <h2>Scorecard</h2>
+      <div class="title-line">
+        <h2>Scorecard</h2>
+        <span class="bonus-line" id="bonusLine"></span>
+      </div>
       <button class="text-btn" id="resetBtn">New game</button>
     </div>
-    <div class="bonus-line" id="bonusLine"></div>
     <div class="board">
       <div class="col" id="upperCol"></div>
       <div class="col" id="lowerCol"></div>
@@ -97,9 +99,11 @@
 
   <section class="card" id="playScoreSection">
     <div class="section-head">
-      <h2 id="playCardTitle">Scorecard</h2>
+      <div class="title-line">
+        <h2 id="playCardTitle">Scorecard</h2>
+        <span class="bonus-line" id="playBonusLine"></span>
+      </div>
     </div>
-    <div class="bonus-line" id="playBonusLine"></div>
     <div class="board">
       <div class="col" id="playUpperCol"></div>
       <div class="col" id="playLowerCol"></div>
