@@ -254,6 +254,11 @@ details.more summary {
 .box.scoreable { border-style: dashed; border-color: var(--keep-line); cursor: pointer; }
 .box.scoreable .val { color: var(--accent); font-weight: 700; }
 .box.scoreable:active { background: var(--keep); }
+/* Pending box choice at the score stage: blue when it's the recommendation,
+   amber when the player picked a different box. */
+.box.picked { border-style: solid; border-width: 2px; background: var(--keep); }
+.box.picked.pick-deviate { border-color: var(--warn); background: var(--warn-bg); }
+.box.picked.pick-deviate .val { color: var(--warn); }
 .winner { color: var(--good); font-weight: 700; }
 .over-chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -284,7 +289,7 @@ details.more summary {
   border-width: 1.5px; }
 .box.filled .val { color: var(--ink); font-weight: 700; }
 .col { display: grid; gap: 6px; align-content: start; }
-.bonus-line { margin-top: 10px; font-size: 13.5px; color: var(--muted);
+.bonus-line { margin: 0 0 10px; font-size: 13.5px; color: var(--muted);
   font-variant-numeric: tabular-nums; }
 .bonus-line b { color: var(--ink); }
 .bonus-line .earned { color: var(--good); font-weight: 700; }
