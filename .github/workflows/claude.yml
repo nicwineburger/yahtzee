@@ -50,12 +50,13 @@ jobs:
           # Safe to grant repo script/gh access: the action only runs this
           # job for actors with repo write access by default (docs/security.md).
           claude_args: |
-            --allowedTools "Read,Grep,Glob,Write,Bash(scripts/automation/*.sh:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh api:*)"
+            --allowedTools "Read,Grep,Glob,Write,Bash(scripts/automation/*.sh:*),Bash(./scripts/automation/*.sh:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh api:*)"
             --json-schema '{"type":"object","properties":{"posted":{"type":"boolean","description":"true only if the requirements comment was actually created or updated via gh issue comment or gh api"},"reason":{"type":"string","description":"why posting failed or was skipped; empty string if posted is true"}},"required":["posted","reason"]}'
       - if: steps.key.outputs.present == 'true'
         name: Fail loudly if no requirements comment was posted
+        env:
+          OUTPUT: ${{ steps.claude.outputs.structured_output }}
         run: |
-          OUTPUT='${{ steps.claude.outputs.structured_output }}'
           if [ -z "$OUTPUT" ] || [ "$(printf '%s' "$OUTPUT" | jq -r '.posted // false')" != "true" ]; then
             echo "::error::expand-issue did not post a requirements comment (structured_output: ${OUTPUT:-<empty>})"
             exit 1
@@ -95,4 +96,4 @@ jobs:
           # Safe to grant repo script access: the action only runs this job
           # for actors with repo write access by default (docs/security.md).
           claude_args: |
-            --allowedTools "Bash(scripts/automation/*.sh:*)"
+            --allowedTools "Bash(scripts/automation/*.sh:*),Bash(./scripts/automation/*.sh:*)"
