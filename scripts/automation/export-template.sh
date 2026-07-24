@@ -57,6 +57,12 @@ REVIEW_MAX_ROUNDS=3
 
 # EDIT ME: words that must never appear in a template export of this repo.
 TEMPLATE_LEAK_WORDS=""
+
+# EDIT ME: maps each issue-template "### Area" dropdown option
+# (.github/ISSUE_TEMPLATE/*.yml) to a label, e.g.
+# "frontend=area:frontend;backend=area:backend". "" = no area labels.
+# Used by setup-labels.sh and by claude.yml / the expand-issue skill.
+AREA_LABEL_MAP=""
 EOF
 
 cat >"$TARGET/.github/workflows/pr.yml" <<'EOF'
@@ -66,9 +72,17 @@ on:
   pull_request:
     branches: [main]
     types: [opened, edited, synchronize, reopened]
+  # Fallback for PRs opened by claude.yml's `implement` job (GITHUB_TOKEN
+  # PRs don't fire pull_request normally — see that job's comments). Keep
+  # this trigger even if you don't use the implement job.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to lint (set by claude.yml's implement job)"
+        required: true
 
 concurrency:
-  group: pr-${{ github.event.pull_request.number }}
+  group: pr-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
@@ -76,9 +90,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve PR title (workflow_dispatch has no pull_request context)
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          EVENT_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TITLE="$(gh pr view "$PR_NUMBER" --json title -q .title)"
+          else
+            TITLE="$EVENT_TITLE"
+          fi
+          printf 'title=%s\n' "$TITLE" >>"$GITHUB_OUTPUT"
       - name: PR title must be a conventional commit (it becomes the squash commit)
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
         run: ./scripts/automation/lint-commit.sh --message "$PR_TITLE"
 
   test:
@@ -96,17 +124,24 @@ cat >"$TARGET/TEMPLATE_SETUP.md" <<'EOF'
 # Automation template — setup for a new repo
 
 1. Copy `.automation.conf.example` to `.automation.conf`; set `TEST_CMD`
-   (and optionally scopes, leak words, secondary suite).
+   (and optionally scopes, leak words, secondary suite, `AREA_LABEL_MAP`).
 2. Edit `.github/workflows/pr.yml`: replace the placeholder `test` job with
-   your real suite (keep the `lint-pr-title` job as is).
+   your real suite (keep the `lint-pr-title` job and its `workflow_dispatch`
+   trigger as is).
 3. Run `scripts/automation/install-hooks.sh` once per clone (commit-msg lint
    + commit template).
 4. Run `scripts/automation/check-setup.sh` — fix anything it flags
    (needs gh >= 2.40 authenticated, jq).
-5. Optional event-driven layer: run `/install-github-app` from Claude Code,
+5. Run `scripts/automation/setup-labels.sh` to create the status/`implement`/
+   `blocked`/area labels (see `scripts/automation/README.md`'s Label
+   lifecycle section). Safe to re-run any time, including after editing
+   `AREA_LABEL_MAP`.
+6. Optional event-driven layer: run `/install-github-app` from Claude Code,
    add an `ANTHROPIC_API_KEY` repo secret; `.github/workflows/claude.yml`
-   then answers @claude mentions and expands new issues automatically.
-6. In GitHub repo settings, allow ONLY squash merging (the automation
+   then answers @claude mentions, expands new issues automatically, and (if
+   you add the `implement` label to a requirements-bearing issue) implements
+   the change on a branch and opens a PR.
+7. In GitHub repo settings, allow ONLY squash merging (the automation
    assumes squash; PR titles become the commits on the default branch).
 
 Day-to-day: see `scripts/automation/README.md` and the Claude Code skills in

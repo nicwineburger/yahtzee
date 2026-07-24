@@ -46,6 +46,7 @@ authenticated, jq present — failing with an actionable one-liner
 | `changelog.sh [--from] [--to] [--version]` | grouped markdown changelog to stdout |
 | `release.sh [--dry-run] [--yes] [--version]` | tag + push + GitHub Release with generated notes |
 | `export-template.sh <dir> [--force]` | export the generic layer for a template repo; **fails if repo-specific words leak** |
+| `setup-labels.sh` | idempotently create/update the status/`implement`/`blocked`/area labels (see Label lifecycle below); never run automatically |
 
 Destructive/remote-mutating scripts (`pr-merge.sh`, `release.sh`) prompt for
 confirmation; `AUTOMATION_YES=1` (or `--yes`) skips the prompt — skills set it
@@ -77,6 +78,39 @@ flows can find/update their own comments idempotently:
 
 Fill-in templates: `scripts/automation/templates/*.md` (`{{PLACEHOLDER}}`
 tokens are replaced by the orchestrating skill, not by shell).
+
+## Label lifecycle
+
+`scripts/automation/setup-labels.sh` idempotently creates every label below
+via `gh label create --force` (run it once per repo, and again after editing
+`AREA_LABEL_MAP`). It is never run automatically by a workflow or skill.
+
+| label | applied by | meaning |
+|---|---|---|
+| `status:requirements` | `expand-issue` (skill step 6, and `claude.yml`'s `expand-issue` job) | requirements posted; ready for `implement` |
+| `area:*` (from `AREA_LABEL_MAP`) | same as above, parsed from the issue's `### Area` dropdown value | which part of the repo the issue touches |
+| `implement` | a human, added manually to a requirements-bearing issue | triggers `claude.yml`'s `implement` job |
+| `status:in-progress` | `issue-flow` Phase 2 locally; `claude.yml`'s `implement` job when it opens the PR | implementation underway on a branch/PR |
+| `blocked` | a human | blocked on a decision or external dependency |
+
+`AREA_LABEL_MAP` in `.automation.conf` maps each issue-template `### Area`
+dropdown option (`.github/ISSUE_TEMPLATE/*.yml`) to a label, e.g.
+`web app (docs/)=area:webapp`. Keeping the map in `.automation.conf` (rather
+than hardcoding it in `claude.yml` or the skills) keeps the generic layer
+template-exportable.
+
+**`implement`-label trigger flow:** add `implement` to an issue that already
+has a `<!-- claude:requirements` comment (from `expand-issue`) -> the
+`implement` job in `claude.yml` fires (`issues: labeled`), immediately
+removes the label (re-adding it later retries the run), writes the issue +
+requirements to `/tmp/issue-context.md`, runs Claude with file tools only
+(no Bash) to make the change, then deterministically lints the title, brands
+a `<type>/<N>-ci-<slug>` branch, commits, pushes, opens a PR, dispatches
+`pr.yml` for it (see that workflow's `workflow_dispatch` trigger for why),
+and swaps `implement` for `status:in-progress` + an assignee on the issue.
+If Claude reports it couldn't implement the change, or the requirements
+comment is missing, the job fails with an `::error::` explaining why instead
+of opening an empty PR.
 
 ## Event-driven triggering
 
