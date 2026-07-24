@@ -194,6 +194,8 @@ details.more summary {
 .die.empty { border-style: dashed; }
 .die.kept { border-color: var(--keep-line); background: var(--keep);
   border-width: 2.5px; }
+/* Holds that deviate from the advised keep go amber, matching the chip. */
+.die.kept.deviate { border-color: var(--warn); background: var(--warn-bg); }
 .die.dim { opacity: 0.38; }
 .die-slot { width: 52px; height: 52px; border-radius: 12px;
   border: 1.5px dashed var(--line); }
