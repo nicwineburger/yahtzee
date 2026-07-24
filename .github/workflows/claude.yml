@@ -22,19 +22,34 @@ jobs:
       github.event_name == 'issues' && github.event.action == 'opened' &&
       github.event.issue.user.type != 'Bot'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       issues: write
       id-token: write # Required: the GitHub App exchanges this OIDC token for its API token
     steps:
       - id: key
+        name: Check for ANTHROPIC_API_KEY
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
       - if: steps.key.outputs.present != 'true'
+        name: Notice — automation inert without ANTHROPIC_API_KEY
         run: echo "::notice::ANTHROPIC_API_KEY secret not set — Claude automation is inert (see scripts/automation/README.md)"
       - if: steps.key.outputs.present == 'true'
+        name: Checkout (sparse — skips math/data)
+        # Blob-filtered sparse checkout: math/data holds ~2.5 GiB of binary
+        # solver shards (24k+ files) that no Claude job reads; a full fetch
+        # of that pack once took 18 minutes (run 30108055561). The exclude
+        # pattern is harmless in repos without the path (template export:
+        # EDIT to match your repo's large committed data dirs, or drop).
         uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
       # Model writes, workflow posts: earlier revisions let Claude call
       # `gh issue comment` / `gh api` itself via Bash, but the action's
       # prefix-rule matcher misses shell shapes Claude is free to type
@@ -44,6 +59,7 @@ jobs:
       # to a file; the deterministic step below does the actual posting.
       - if: steps.key.outputs.present == 'true'
         id: claude
+        name: Expand issue into requirements (Claude)
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -85,6 +101,43 @@ jobs:
           claude_args: |
             --allowedTools "Read,Grep,Glob,Write"
             --json-schema '{"type":"object","properties":{"written":{"type":"boolean","description":"true only if /tmp/requirements-comment.md was written with the marker line first"},"reason":{"type":"string","description":"why writing failed or was skipped; empty string if written is true"}},"required":["written","reason"]}'
+      - name: Claude execution summary
+        # Always runs (even when the Claude step fails) so the run's Summary
+        # page says what Claude actually did: turns, cost, duration, result.
+        if: always() && steps.key.outputs.present == 'true' && steps.claude.outcome != 'skipped'
+        env:
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+        run: |
+          {
+            echo "## Claude execution (${CLAUDE_OUTCOME})"
+            if [ -n "$EXEC_FILE" ] && [ -f "$EXEC_FILE" ]; then
+              jq -r '(last // {}) |
+                "- turns: \(.num_turns // "?")",
+                "- duration: \((.duration_ms // 0) / 1000 | round)s",
+                "- cost: $\(.total_cost_usd // "?")",
+                "- is_error: \(if .is_error == null then "?" else .is_error end)",
+                "",
+                "<details><summary>final result</summary>",
+                "",
+                "\(.result // "(none)")",
+                "",
+                "</details>"' "$EXEC_FILE" 2>/dev/null \
+                || echo "- execution log exists but could not be parsed (see artifact)"
+            else
+              echo "- no execution log produced (step failed before Claude ran?)"
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Upload Claude execution log
+        if: always() && steps.key.outputs.present == 'true' && steps.claude.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-execution-expand-issue-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            /tmp/requirements-comment.md
+          if-no-files-found: ignore
+          retention-days: 14
       - if: steps.key.outputs.present == 'true'
         name: Post requirements comment
         env:
@@ -120,6 +173,7 @@ jobs:
             COMMENT_URL="$(gh issue comment "$ISSUE" --body-file "$FILE")"
           fi
           echo "Posted requirements comment: $COMMENT_URL"
+          printf '## Requirements posted\n- issue: #%s\n- comment: %s\n' "$ISSUE" "$COMMENT_URL" >>"$GITHUB_STEP_SUMMARY"
 
           # Deterministic labeling (not model-decided): a missing label on
           # the repo must not fail the job — warn and move on. Run
@@ -164,6 +218,7 @@ jobs:
       contains(github.event.comment.body, '@claude') &&
       github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       issues: write
@@ -172,16 +227,26 @@ jobs:
       actions: read # Lets Claude read CI results when replying on PRs
     steps:
       - id: key
+        name: Check for ANTHROPIC_API_KEY
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
       - if: steps.key.outputs.present != 'true'
+        name: Notice — automation inert without ANTHROPIC_API_KEY
         run: echo "::notice::ANTHROPIC_API_KEY secret not set — Claude automation is inert (see scripts/automation/README.md)"
       - if: steps.key.outputs.present == 'true'
+        name: Checkout (sparse — skips math/data)
+        # Same blob-filtered sparse checkout as expand-issue (math/data excluded).
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
       - if: steps.key.outputs.present == 'true'
+        name: Answer @claude mention (Claude)
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -203,6 +268,7 @@ jobs:
       github.event.label.name == 'implement' &&
       github.event.sender.type != 'Bot'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       issues: write
@@ -214,15 +280,24 @@ jobs:
       actions: write
     steps:
       - id: key
+        name: Check for ANTHROPIC_API_KEY
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
       - if: steps.key.outputs.present != 'true'
+        name: Notice — automation inert without ANTHROPIC_API_KEY
         run: echo "::notice::ANTHROPIC_API_KEY secret not set — Claude automation is inert (see scripts/automation/README.md)"
       - if: steps.key.outputs.present == 'true'
+        name: Checkout (sparse — skips math/data)
+        # Same blob-filtered sparse checkout as expand-issue (math/data excluded).
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
       - if: steps.key.outputs.present == 'true'
         name: Consume trigger label + fetch requirements
         env:
@@ -256,6 +331,7 @@ jobs:
           } >/tmp/issue-context.md
       - if: steps.key.outputs.present == 'true'
         id: claude
+        name: Implement change in working tree (Claude)
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -291,6 +367,43 @@ jobs:
           claude_args: |
             --allowedTools "Read,Grep,Glob,Write,Edit"
             --json-schema '{"type":"object","properties":{"implemented":{"type":"boolean","description":"true only if the working tree was actually changed"},"pr_title":{"type":"string","description":"conventional commit subject, <=72 chars, describes the whole change"},"summary":{"type":"string","description":"markdown PR body: Summary/Changes/Test plan"},"reason":{"type":"string","description":"why implementation failed or was skipped; empty string if implemented is true"}},"required":["implemented","pr_title","summary","reason"]}'
+      - name: Claude execution summary
+        # Always runs (even when the Claude step fails) so the run's Summary
+        # page says what Claude actually did: turns, cost, duration, result.
+        if: always() && steps.key.outputs.present == 'true' && steps.claude.outcome != 'skipped'
+        env:
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+        run: |
+          {
+            echo "## Claude execution (${CLAUDE_OUTCOME})"
+            if [ -n "$EXEC_FILE" ] && [ -f "$EXEC_FILE" ]; then
+              jq -r '(last // {}) |
+                "- turns: \(.num_turns // "?")",
+                "- duration: \((.duration_ms // 0) / 1000 | round)s",
+                "- cost: $\(.total_cost_usd // "?")",
+                "- is_error: \(if .is_error == null then "?" else .is_error end)",
+                "",
+                "<details><summary>final result</summary>",
+                "",
+                "\(.result // "(none)")",
+                "",
+                "</details>"' "$EXEC_FILE" 2>/dev/null \
+                || echo "- execution log exists but could not be parsed (see artifact)"
+            else
+              echo "- no execution log produced (step failed before Claude ran?)"
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Upload Claude execution log
+        if: always() && steps.key.outputs.present == 'true' && steps.claude.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-execution-implement-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            /tmp/issue-context.md
+          if-no-files-found: ignore
+          retention-days: 14
       - if: steps.key.outputs.present == 'true'
         name: Branch, commit, push, open PR
         env:
@@ -404,3 +517,8 @@ jobs:
           gh issue comment "$ISSUE" --body "Implementation PR: $PR_URL"
 
           echo "Opened PR: $PR_URL"
+          {
+            printf '## Implementation PR opened\n- issue: #%s\n- branch: %s\n- PR: %s\n\n### Diffstat\n\n```\n' "$ISSUE" "$BRANCH" "$PR_URL"
+            git show --stat --format='' HEAD
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"

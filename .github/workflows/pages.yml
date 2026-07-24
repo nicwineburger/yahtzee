@@ -18,6 +18,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Official Playwright image: browsers + system deps preinstalled, no
     # install step. The tag MUST match the playwright version in package.json.
     container:
@@ -34,6 +35,7 @@ jobs:
 
   test-math:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,11 +49,19 @@ jobs:
   deploy:
     needs: [test, test-math]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Blob-filtered sparse checkout — skips the 2.5 GiB math/data pack (see claude.yml).
       - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
       - name: Stamp build version for cache busting
         run: |
           SHA="${GITHUB_SHA::12}"
@@ -79,6 +89,7 @@ jobs:
     needs: [deploy]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Job-level override: only this job gets contents:write (to push a tag
     # and create the Release); it does NOT inherit pages:write/id-token:write
     # from the top-level block above, since job-level permissions replace
@@ -89,11 +100,17 @@ jobs:
       # fetch-depth: 0 + explicit ref: main gives a real (non-detached)
       # local 'main' with full tag history, which require_branch/
       # require_clean_tree in scripts/automation/lib.sh and next-version.sh's
-      # `git describe` need.
+      # `git describe` need. filter: blob:none + sparse-checkout still skips
+      # the 2.5 GiB math/data pack (see claude.yml) without losing history.
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
       - name: Configure git identity for tagging
         run: |
           git config user.name "github-actions[bot]"
