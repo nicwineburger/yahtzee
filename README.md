@@ -38,3 +38,15 @@ Everything lives in [`math/`](math/):
 Setup: `python3 -m venv .venv && .venv/bin/pip install numpy pandas
 matplotlib tqdm`, then run scripts from `math/` with
 `../.venv/bin/python <script>.py`.
+
+## Testing
+
+All of these run in CI before every Pages deploy:
+
+```sh
+npm ci                      # test tooling (Playwright)
+npm run test:engine         # browser engine vs Python-policy fixtures
+npm run test:engine-extra   # engine property tests (scoring rules, invariants)
+npm run test:ui             # Playwright end-to-end, both app modes
+cd math && ../.venv/bin/python test_yacht_clubhouse.py   # solver + exports
+```

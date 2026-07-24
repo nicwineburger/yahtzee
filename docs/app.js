@@ -79,12 +79,30 @@ function dieSVG(face, size = 24, framed = false) {
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
+// The advice card lives at the top in advisor mode, but in play mode it sits
+// between the round card and the scorecard, right under the advice toggle.
+function placeAdviceCard() {
+  const advice = $("advice");
+  if (mode === "play") {
+    const target = $("playScoreSection");
+    if (advice.nextElementSibling !== target || advice.parentElement !== target.parentElement) {
+      target.parentElement.insertBefore(advice, target);
+    }
+  } else {
+    const view = $("advisorView");
+    if (advice.nextElementSibling !== view || advice.parentElement !== view.parentElement) {
+      view.parentElement.insertBefore(advice, view);
+    }
+  }
+}
+
 function render() {
   document.querySelectorAll("#modeSeg button").forEach((b) => {
     b.classList.toggle("on", b.dataset.mode === mode);
   });
   $("advisorView").hidden = mode !== "advisor";
   $("playView").hidden = mode !== "play";
+  placeAdviceCard();
   if (mode === "advisor") {
     $("advice").hidden = false;
     renderDice();

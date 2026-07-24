@@ -56,6 +56,8 @@ GitHub Pages, either way works:
 ```sh
 python3 -m http.server -d docs     # then open http://localhost:8000
 node docs/engine_test.mjs          # engine vs Python-solver fixtures
+node tests/engine-extra.test.mjs   # engine property tests
+node tests/ui.test.mjs             # Playwright end-to-end suite (needs npm ci)
 ```
 
 `test_fixtures.json` holds per-stage EVs and best actions for 14

@@ -1,0 +1,13 @@
+{
+  "name": "yacht-dice-solver",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:engine && npm run test:engine-extra && npm run test:ui",
+    "test:engine": "node docs/engine_test.mjs",
+    "test:engine-extra": "node tests/engine-extra.test.mjs",
+    "test:ui": "node tests/ui.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
