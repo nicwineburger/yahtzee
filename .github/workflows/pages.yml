@@ -68,3 +68,46 @@ jobs:
           path: docs
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Cuts a semver-tagged GitHub Release with a generated changelog after
+  # every successful deploy — see scripts/automation/{release,next-version,
+  # changelog}.sh (also what the interactive /release skill runs). Gated to
+  # 'push' so a manual workflow_dispatch re-deploy doesn't try to re-release
+  # an already-tagged commit (harmless either way: next-version.sh would
+  # just report nothing releasable).
+  release:
+    needs: [deploy]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # Job-level override: only this job gets contents:write (to push a tag
+    # and create the Release); it does NOT inherit pages:write/id-token:write
+    # from the top-level block above, since job-level permissions replace
+    # rather than extend the workflow default.
+    permissions:
+      contents: write
+    steps:
+      # fetch-depth: 0 + explicit ref: main gives a real (non-detached)
+      # local 'main' with full tag history, which require_branch/
+      # require_clean_tree in scripts/automation/lib.sh and next-version.sh's
+      # `git describe` need.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Configure git identity for tagging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Cut a release if there are releasable commits since the last tag
+        env:
+          # `gh auth status` (required by lib.sh's require_gh) and
+          # `gh release create` both accept GH_TOKEN non-interactively.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rc=0
+          AUTOMATION_YES=1 scripts/automation/release.sh || rc=$?
+          if [ "$rc" -eq 3 ]; then
+            echo "::notice::no releasable commits (feat/fix/perf/revert/breaking) since the last tag — skipping release"
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
