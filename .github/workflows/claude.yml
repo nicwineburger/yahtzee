@@ -30,37 +30,90 @@ jobs:
         run: echo "::notice::ANTHROPIC_API_KEY secret not set — Claude automation is inert (see scripts/automation/README.md)"
       - if: steps.key.outputs.present == 'true'
         uses: actions/checkout@v4
+      # Model writes, workflow posts: earlier revisions let Claude call
+      # `gh issue comment` / `gh api` itself via Bash, but the action's
+      # prefix-rule matcher misses shell shapes Claude is free to type
+      # (`cd ... && scripts/...`, `bash scripts/...`, etc.), so calls kept
+      # getting denied even with the rules loaded (run 30084164305). No Bash
+      # at all here — Claude only reads the repo and writes the comment body
+      # to a file; the deterministic step below does the actual posting.
       - if: steps.key.outputs.present == 'true'
         id: claude
         uses: anthropics/claude-code-action@v1
-        env:
-          GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            /expand-issue ${{ github.event.issue.number }}
+            Write a complete requirements comment for GitHub issue
+            #${{ github.event.issue.number }} in this repository to the file
+            /tmp/requirements-comment.md.
 
-            Success criterion: this run only succeeds if the requirements
-            comment is actually created or updated on the issue (via
-            `gh issue comment` or `gh api ... -X PATCH`, per the skill).
-            Set the structured output `posted` field to true only once that
-            call has actually succeeded; otherwise set it false and put the
-            reason (e.g. a denied tool call, a check-setup.sh failure) in
-            `reason` — do not report success without a live comment.
-          # Safe to grant repo script/gh access: the action only runs this
-          # job for actors with repo write access by default (docs/security.md).
+            Issue title: ${{ github.event.issue.title }}
+
+            Issue body:
+            ${{ github.event.issue.body }}
+
+            Explore the repository with Read/Grep/Glob to understand current
+            behavior before specifying new behavior (cite real file paths).
+            Check CLAUDE.md for constraints that shape the requirements. You
+            have no Bash access in this run — do not attempt to run commands
+            or post anything yourself; only write the file.
+
+            The file's FIRST LINE must be exactly this marker:
+            <!-- claude:requirements v1 -->
+
+            Follow it with a `## Expanded requirements` heading, then these
+            sections in this order (mirroring
+            scripts/automation/templates/requirements-comment.md):
+            - `### Goal`
+            - `### Background & current behavior` (cite real file paths)
+            - `### Functional requirements` (numbered, individually testable)
+            - `### Non-goals`
+            - `### Acceptance criteria` (a checklist a reviewer can verify
+              mechanically)
+            - `### Test plan` (name actual test files/commands)
+            - `### Open questions` (ONLY things you genuinely cannot decide
+              from the code, the issue, or repo conventions)
+
+            Set the structured output `written` field to true only once the
+            file has actually been written with the marker as its first
+            line; otherwise set it false and explain why in `reason`.
           claude_args: |
-            --allowedTools "Read,Grep,Glob,Write,Bash(scripts/automation/*.sh:*),Bash(./scripts/automation/*.sh:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh api:*)"
-            --json-schema '{"type":"object","properties":{"posted":{"type":"boolean","description":"true only if the requirements comment was actually created or updated via gh issue comment or gh api"},"reason":{"type":"string","description":"why posting failed or was skipped; empty string if posted is true"}},"required":["posted","reason"]}'
+            --allowedTools "Read,Grep,Glob,Write"
+            --json-schema '{"type":"object","properties":{"written":{"type":"boolean","description":"true only if /tmp/requirements-comment.md was written with the marker line first"},"reason":{"type":"string","description":"why writing failed or was skipped; empty string if written is true"}},"required":["written","reason"]}'
       - if: steps.key.outputs.present == 'true'
-        name: Fail loudly if no requirements comment was posted
+        name: Post requirements comment
         env:
+          GH_TOKEN: ${{ github.token }}
           OUTPUT: ${{ steps.claude.outputs.structured_output }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          FILE: /tmp/requirements-comment.md
         run: |
-          if [ -z "$OUTPUT" ] || [ "$(printf '%s' "$OUTPUT" | jq -r '.posted // false')" != "true" ]; then
-            echo "::error::expand-issue did not post a requirements comment (structured_output: ${OUTPUT:-<empty>})"
+          if [ -z "$OUTPUT" ] || [ "$(printf '%s' "$OUTPUT" | jq -r '.written // false')" != "true" ]; then
+            echo "::error::expand-issue did not write a requirements file (structured_output: ${OUTPUT:-<empty>})"
             exit 1
           fi
+          if [ ! -f "$FILE" ]; then
+            echo "::error::expand-issue reported written=true but $FILE is missing"
+            exit 1
+          fi
+          FIRST_LINE="$(head -n1 "$FILE")"
+          if [ "$FIRST_LINE" != "<!-- claude:requirements v1 -->" ]; then
+            echo "::error::$FILE does not start with the <!-- claude:requirements v1 --> marker (got: $FIRST_LINE)"
+            exit 1
+          fi
+
+          EXISTING_ID="$(gh api "repos/$REPO/issues/$ISSUE/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- claude:requirements"))] | last | .id // empty')"
+
+          if [ -n "$EXISTING_ID" ]; then
+            COMMENT_URL="$(gh api "repos/$REPO/issues/comments/$EXISTING_ID" -X PATCH -F body=@"$FILE" --jq '.html_url')"
+          else
+            # `gh issue comment` has no --json/--jq output flags; it prints
+            # the new comment's URL to stdout on success.
+            COMMENT_URL="$(gh issue comment "$ISSUE" --body-file "$FILE")"
+          fi
+          echo "Posted requirements comment: $COMMENT_URL"
 
   # @claude mentions in issue/PR comments (humans only; bot comments never
   # retrigger — that also keeps the automation's own comments from looping).
