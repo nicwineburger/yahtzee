@@ -299,6 +299,7 @@ jobs:
             !/math/data/
           sparse-checkout-cone-mode: false
       - if: steps.key.outputs.present == 'true'
+        id: conf
         name: Consume trigger label + fetch requirements
         env:
           GH_TOKEN: ${{ github.token }}
@@ -329,6 +330,16 @@ jobs:
             printf '## Issue body\n\n%s\n\n' "$ISSUE_BODY"
             printf '## Expanded requirements\n\n%s\n' "$REQ_BODY"
           } >/tmp/issue-context.md
+
+          # Feed the commit contract to the prompt below from .automation.conf
+          # rather than hardcoding it there — the limits the title is checked
+          # against and the ones Claude is told about must be the same values,
+          # and this file stays template-generic.
+          . "$GITHUB_WORKSPACE/.automation.conf"
+          {
+            printf 'subject_max_len=%s\n' "$SUBJECT_MAX_LEN"
+            printf 'branch_types=%s\n' "$BRANCH_TYPES"
+          } >>"$GITHUB_OUTPUT"
       - if: steps.key.outputs.present == 'true'
         id: claude
         name: Implement change in working tree (Claude)
@@ -357,16 +368,24 @@ jobs:
             - implemented: true only if you actually made the changes in the
               working tree; otherwise false, with reason explaining why.
             - pr_title: a conventional-commit subject
-              (`<type>(<scope>): <summary>`, <=72 chars, no trailing period)
-              that describes the WHOLE change — it becomes the PR title and
-              the squash commit on main.
+              `<type>(<scope>): <summary>` describing the WHOLE change — it
+              becomes the PR title and the squash commit on main. Hard
+              requirements, checked by CI:
+              * type MUST be one of:
+                ${{ steps.conf.outputs.branch_types }}
+              * the WHOLE line, counting the `<type>(<scope>): ` prefix,
+                MUST be at most ${{ steps.conf.outputs.subject_max_len }}
+                characters — count them, and aim ~10 under to be safe. A
+                short title plus detail in `summary` beats a long title;
+                an over-long one gets truncated at a word boundary.
+              * no trailing period.
             - summary: the PR body as markdown, with `## Summary`,
               `## Changes`, and `## Test plan` sections.
             - reason: why implementation failed or was skipped; empty string
               if implemented is true.
           claude_args: |
             --allowedTools "Read,Grep,Glob,Write,Edit"
-            --json-schema '{"type":"object","properties":{"implemented":{"type":"boolean","description":"true only if the working tree was actually changed"},"pr_title":{"type":"string","description":"conventional commit subject, <=72 chars, describes the whole change"},"summary":{"type":"string","description":"markdown PR body: Summary/Changes/Test plan"},"reason":{"type":"string","description":"why implementation failed or was skipped; empty string if implemented is true"}},"required":["implemented","pr_title","summary","reason"]}'
+            --json-schema '{"type":"object","properties":{"implemented":{"type":"boolean","description":"true only if the working tree was actually changed"},"pr_title":{"type":"string","description":"conventional commit subject describing the whole change; type from [${{ steps.conf.outputs.branch_types }}], at most ${{ steps.conf.outputs.subject_max_len }} characters including the type/scope prefix, no trailing period"},"summary":{"type":"string","description":"markdown PR body: Summary/Changes/Test plan"},"reason":{"type":"string","description":"why implementation failed or was skipped; empty string if implemented is true"}},"required":["implemented","pr_title","summary","reason"]}'
       - name: Claude execution summary
         # Always runs (even when the Claude step fails) so the run's Summary
         # page says what Claude actually did: turns, cost, duration, result.
@@ -447,11 +466,23 @@ jobs:
             fi
           fi
 
-          PR_TITLE="$(printf '%s' "$OUTPUT" | jq -r '.pr_title')"
+          PR_TITLE_RAW="$(printf '%s' "$OUTPUT" | jq -r '.pr_title')"
           PR_SUMMARY="$(printf '%s' "$OUTPUT" | jq -r '.summary')"
 
-          scripts/automation/lint-commit.sh --message "$PR_TITLE" \
-            || { echo "::error::implement job: pr_title fails lint-commit.sh: $PR_TITLE"; exit 1; }
+          # A model-authored title that overshoots SUBJECT_MAX_LEN by a few
+          # characters used to fail the whole job here, throwing away a
+          # finished implementation (run 30110961060: 75 chars, max 72).
+          # normalize-subject.sh repairs the mechanical defects (length,
+          # trailing punctuation, stray whitespace) and re-lints; structural
+          # problems (bad type, no colon) are still a hard failure, since
+          # guessing a type would change what the commit claims to be.
+          if ! PR_TITLE="$(scripts/automation/normalize-subject.sh --message "$PR_TITLE_RAW")"; then
+            echo "::error::implement job: pr_title is not a repairable conventional-commit subject: $PR_TITLE_RAW"
+            exit 1
+          fi
+          if [ "$PR_TITLE" != "$PR_TITLE_RAW" ]; then
+            echo "::warning::pr_title repaired to satisfy the commit contract: '$PR_TITLE_RAW' -> '$PR_TITLE'"
+          fi
 
           . "$GITHUB_WORKSPACE/.automation.conf"
 
@@ -522,3 +553,34 @@ jobs:
             git show --stat --format='' HEAD
             printf '```\n'
           } >>"$GITHUB_STEP_SUMMARY"
+      # Every failure mode of the step above (unpushable workflow file, a
+      # title that can't be repaired, a branch collision, gh pr create denied
+      # by repo settings) lands after Claude has already done the work, and
+      # the runner is discarded with it. Keep the diff as an artifact so the
+      # run is recoverable with `git apply` instead of a full re-run.
+      - name: Preserve implementation diff on failure
+        if: failure() && steps.key.outputs.present == 'true' && steps.claude.outcome == 'success'
+        run: |
+          . "$GITHUB_WORKSPACE/.automation.conf"
+          # Diff against the base branch, not the index: the failure may have
+          # come before or after the local commit, and this captures both
+          # (git add -A first so new files count as tracked).
+          git add -A
+          BASE="origin/$DEFAULT_BRANCH"
+          git rev-parse --verify --quiet "$BASE" >/dev/null || BASE=HEAD
+          git diff --binary "$BASE" >/tmp/implementation.patch || true
+          {
+            printf '## Implementation not pushed\n\nThe working tree Claude produced is attached as the '
+            printf '`claude-implementation-patch-*` artifact — download it and `git apply` it locally, '
+            printf 'or re-add the `implement` label to redo the run.\n\n```\n'
+            git diff --stat "$BASE"
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Upload implementation patch
+        if: failure() && steps.key.outputs.present == 'true' && steps.claude.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-implementation-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/implementation.patch
+          if-no-files-found: ignore
+          retention-days: 14
