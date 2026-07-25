@@ -165,6 +165,14 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em;
   font-variant-numeric: tabular-nums; text-align: left;
 }
 .alt-btn:active { background: var(--keep); color: var(--ink); }
+/* The optimal entry, when it reappears in an alternatives list after the
+   player deviates — a highlighted way back, not just another row. */
+.alt-btn.recommended { background: var(--keep); border-radius: 8px; }
+.alt-btn.recommended .delta { color: var(--keep-line); font-weight: 600; }
+.rec-tag {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  color: var(--keep-line); letter-spacing: 0.02em;
+}
 .alts .what { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .alts .mini-dice { display: flex; gap: 3px; }
 .delta { white-space: nowrap; }
@@ -202,6 +210,9 @@ details.more summary {
 /* Holds that deviate from the advised keep go amber, matching the chip. */
 .die.kept.deviate { border-color: var(--warn); background: var(--warn-bg); }
 .die.dim { opacity: 0.38; }
+/* Final roll: no rerolls left, so a die tap does nothing — the button must
+   not still look tappable. */
+.die:disabled { cursor: default; }
 .die-slot { width: 52px; height: 52px; border-radius: 12px;
   border: 1.5px dashed var(--line); }
 .pip { fill: var(--ink); }
