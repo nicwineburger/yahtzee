@@ -85,4 +85,5 @@ RUN set -eux; \
     gh_version="$(gh --version)"; \
     printf '%s\n' "$gh_version" | awk 'NR==1 { split($3, v, "."); exit (v[1] * 10000 + v[2] * 100 + v[3] >= 24000) ? 0 : 1 }'; \
     python3 -c "import numpy, tqdm; print('numpy', numpy.__version__, 'tqdm', tqdm.__version__)"; \
-    npx playwright --version
+    ls -1 "${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}" | head -n5; \
+    test -n "$(ls -A "${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}" 2>/dev/null)"
