@@ -261,8 +261,24 @@ async function newPage(opts = {}) {
   check("held dice survive the reroll", d2[0] === d1[0] && d2[1] === d1[1]);
   await page.click("#rollBtn");
   check("no fourth roll", await page.$eval("#rollBtn", (b) => b.disabled));
+  // Final roll: holding is meaningless with no rerolls left, so the dice stop
+  // being controls rather than staying live-looking and swallowing taps
+  // (renderPlay's finalRoll branch, docs/app.js). A plain page.click() would
+  // hang here waiting for the button to become enabled — that IS the fix.
+  check("final-roll dice are disabled",
+    await page.$$eval("#playDiceRow .die", (els) => els.length === 5 && els.every((e) => e.disabled)));
+  check("final-roll dice drop the tap-to-toggle affordance",
+    await page.$$eval("#playDiceRow .die", (els) => els.every((e) => {
+      const label = e.getAttribute("aria-label") || "";
+      return label.includes("no rerolls left") && !label.includes("tap to toggle");
+    })));
+  check("final-roll dice show no pointer cursor",
+    await page.$$eval("#playDiceRow .die",
+      (els) => els.every((e) => getComputedStyle(e).cursor !== "pointer")));
   const beforeHold = (await held()).join();
-  await page.click("#playDiceRow .die:nth-child(3)");
+  // Native .click() on a disabled button is a no-op, so this asserts the tap
+  // has no effect without waiting on Playwright's actionability checks.
+  await page.$eval("#playDiceRow .die:nth-child(3)", (e) => e.click());
   check("holds locked after final roll", (await held()).join() === beforeHold);
 
   // Score previews match the engine
