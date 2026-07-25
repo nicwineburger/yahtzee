@@ -65,7 +65,7 @@ jobs:
     # own lockfile-pinned deps. Pinned by digest: tags are mutable.
     # Keep in sync with CI_IMAGE in .automation.conf and pages.yml.
     container:
-      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:23def4896a8d7f259b3fa17a1c8161d7d031dabad292037c66737c1062ae96bc
+      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:fbbe2340f738d780849c0f4390e096501143c0c66002db56855d70794a458230
       # GITHUB_TOKEN-pushed ghcr packages are private by default; these
       # credentials make the pull work whether or not the package is public.
       credentials:
@@ -88,7 +88,7 @@ jobs:
     # setup-python or a pip install whose versions float to whatever the index
     # serves that minute.
     container:
-      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:23def4896a8d7f259b3fa17a1c8161d7d031dabad292037c66737c1062ae96bc
+      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:fbbe2340f738d780849c0f4390e096501143c0c66002db56855d70794a458230
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
