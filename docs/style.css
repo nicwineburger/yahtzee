@@ -315,11 +315,24 @@ details.more summary {
 .sheet-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4);
   display: flex; align-items: flex-end; justify-content: center; z-index: 10;
+  animation: sheet-backdrop-in 0.28s ease-out;
 }
 .sheet-backdrop[hidden] { display: none; }
 .sheet {
   background: var(--card); width: 100%; max-width: 560px;
   border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  animation: sheet-slide-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes sheet-backdrop-in {
+  from { background-color: rgba(0,0,0,0); }
+  to   { background-color: rgba(0,0,0,0.4); }
+}
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-backdrop, .sheet { animation: none; }
 }
 .sheet h3 { margin: 0 0 12px; font-size: 16px; }
 .sheet .opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

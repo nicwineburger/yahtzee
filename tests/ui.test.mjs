@@ -115,7 +115,12 @@ async function newPage(opts = {}) {
 
   // Upper-box picker sheet
   await page.click("#upperCol .box:nth-child(5)");
+  const sheetMidY = await page.$eval(".sheet", (e) => e.getBoundingClientRect().top);
   await page.waitForSelector(".sheet .opts");
+  await page.$eval(".sheet", (e) => Promise.all(e.getAnimations().map((a) => a.finished)));
+  const sheetRestY = await page.$eval(".sheet", (e) => e.getBoundingClientRect().top);
+  check("opening a sheet under normal motion slides up (not instantly at rest)",
+    sheetMidY > sheetRestY);
   await page.click('.sheet .opts button[data-v="15"]');
   const upperSum = await page.$$eval("#upperCol .box.filled .val", (els) =>
     els.reduce((a, e) => a + Number(e.textContent), 0));
@@ -566,6 +571,10 @@ async function newPage(opts = {}) {
   await withSettings(page, async () => {
     check("prefers-reduced-motion defaults the animation off",
       !(await page.$eval("#animToggle", (e) => e.checked)));
+    check("prefers-reduced-motion disables the sheet slide-up animation",
+      (await page.$eval(".sheet", (e) => getComputedStyle(e).animationName)) === "none");
+    check("prefers-reduced-motion disables the backdrop fade-in animation",
+      (await page.$eval(".sheet-backdrop", (e) => getComputedStyle(e).animationName)) === "none");
   });
   await ctx.close();
 }
