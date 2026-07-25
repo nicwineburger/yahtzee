@@ -31,6 +31,15 @@ if [ -f "$ROOT/.claude/settings.json" ]; then cp "$ROOT/.claude/settings.json" "
 if [ -f "$ROOT/.github/PULL_REQUEST_TEMPLATE.md" ]; then cp "$ROOT/.github/PULL_REQUEST_TEMPLATE.md" "$TARGET/.github/"; fi
 if [ -d "$ROOT/.github/ISSUE_TEMPLATE" ]; then cp -R "$ROOT/.github/ISSUE_TEMPLATE" "$TARGET/.github/ISSUE_TEMPLATE"; fi
 if [ -f "$ROOT/.github/workflows/claude.yml" ]; then cp "$ROOT/.github/workflows/claude.yml" "$TARGET/.github/workflows/claude.yml"; fi
+# The CI-image build is part of the generic layer: the rule "jobs pull an
+# image that already has the tooling" only survives into a new repo if the
+# thing that builds that image comes with it. The Dockerfile is repo-specific
+# in content but generic in shape, so it exports as an EDIT-ME starting point.
+if [ -f "$ROOT/.github/workflows/ci-image.yml" ]; then cp "$ROOT/.github/workflows/ci-image.yml" "$TARGET/.github/workflows/ci-image.yml"; fi
+if [ -f "$ROOT/.github/docker/ci.Dockerfile" ]; then
+  mkdir -p "$TARGET/.github/docker"
+  cp "$ROOT/.github/docker/ci.Dockerfile" "$TARGET/.github/docker/ci.Dockerfile"
+fi
 
 # --- repo-specific parts, regenerated as EDIT-ME examples ---
 cat >"$TARGET/.automation.conf.example" <<'EOF'
@@ -47,9 +56,16 @@ TEST_CMD="echo 'set TEST_CMD in .automation.conf' && exit 1"
 # EDIT ME: optional secondary suite ("" = none).
 MATH_TEST_CMD=""
 
-# EDIT ME: the same suites as claude.yml's implement job runs on a CI runner
-# before it pushes, plus whatever install/setup that runner needs first (the
-# runner has no local venv and no preinstalled browsers). CI_TEST_SETUP
+# EDIT ME: the image CI jobs run inside, pinned by DIGEST (tags are mutable).
+# Build it from .github/docker/ci.Dockerfile via .github/workflows/ci-image.yml,
+# then paste the digest that run prints here. Every tool your jobs need must be
+# IN this image — CI must not install tooling at run time. Required before the
+# implement job in claude.yml can run.
+CI_IMAGE=""
+
+# EDIT ME: the same suites as claude.yml's implement job runs before it pushes.
+# CI_TEST_SETUP is for project dependencies only (a lockfile install like
+# `npm ci`); anything else belongs in the Dockerfile, not here. CI_TEST_SETUP
 # failing is not fatal — it only means Claude can't self-verify that run.
 CI_TEST_SETUP="echo 'no CI test setup configured'"
 CI_TEST_CMD="$TEST_CMD"
@@ -119,9 +135,22 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # EDIT ME: run this job in the image you built from
+    # .github/docker/ci.Dockerfile, pinned to the digest ci-image.yml printed
+    # (the same value as CI_IMAGE in .automation.conf). Do NOT replace this
+    # with toolchain install steps — tools belong in the image, so that what a
+    # job runs is decided by a commit here rather than by whatever the network
+    # serves that minute. See TEMPLATE_SETUP.md step 6.
+    # container:
+    #   image: ghcr.io/OWNER/REPO-ci@sha256:...
+    #   credentials:
+    #     username: ${{ github.actor }}
+    #     password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      # EDIT ME: install your toolchain, then run the same suite as TEST_CMD.
+      # EDIT ME: your suite, matching TEST_CMD. Installing project
+      # dependencies from a lockfile here is fine (npm ci, poetry install
+      # --sync, …); installing TOOLS is not.
       - name: Tests
         run: |
           echo "Replace this step with your test suite (see TEST_CMD in .automation.conf)"
@@ -144,19 +173,34 @@ cat >"$TARGET/TEMPLATE_SETUP.md" <<'EOF'
    `blocked`/area labels (see `scripts/automation/README.md`'s Label
    lifecycle section). Safe to re-run any time, including after editing
    `AREA_LABEL_MAP`.
-6. Optional event-driven layer: run `/install-github-app` from Claude Code,
+6. Build the CI image and pin it. **CI jobs must never install tooling at run
+   time** — every tool a job needs belongs in the image it pulls, pinned to a
+   version you chose:
+   - edit `.github/docker/ci.Dockerfile` so it contains your toolchain (it
+     ships as a Playwright + gh + Python example; change the base and the
+     installs to match your stack, and keep the build-time assertions so a
+     missing tool fails the build instead of a run — `git` in particular, or
+     `actions/checkout` silently degrades to a tarball with no `.git`),
+   - push that change: `.github/workflows/ci-image.yml` builds it and prints
+     the digest,
+   - set `CI_IMAGE` in `.automation.conf` to that digest, and use the same
+     digest in the `container: image:` of your test jobs.
+   This is inherently two steps — a commit changing the Dockerfile cannot
+   reference the digest it produces — and it repeats on every image update.
+7. Optional event-driven layer: run `/install-github-app` from Claude Code,
    add an `ANTHROPIC_API_KEY` repo secret; `.github/workflows/claude.yml`
    then answers @claude mentions, expands new issues automatically, and (if
    you add the `implement` label to a requirements-bearing issue) implements
-   the change on a branch and opens a PR.
-7. In GitHub repo settings, allow ONLY squash merging (the automation
+   the change on a branch and opens a PR. Its implement job runs inside
+   `CI_IMAGE`, so step 6 has to be done first.
+8. In GitHub repo settings, allow ONLY squash merging (the automation
    assumes squash; PR titles become the commits on the default branch).
-8. Settings -> Actions -> General -> Workflow permissions: check "Allow
+9. Settings -> Actions -> General -> Workflow permissions: check "Allow
    GitHub Actions to create and approve pull requests" — the implement job
    opens PRs with the workflow token and fails without it. API equivalent:
    `gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow -f
    default_workflow_permissions=read -F can_approve_pull_request_reviews=true`
-9. Optional `WORKFLOWS_PAT` repo secret (fine-grained PAT with contents +
+10. Optional `WORKFLOWS_PAT` repo secret (fine-grained PAT with contents +
    workflows write): lets the implement job push changes that touch
    `.github/workflows/**` — the Actions token cannot (GitHub platform
    restriction). Without it, such issues fail fast with guidance to use the

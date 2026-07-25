@@ -75,6 +75,27 @@ Two halves, one repo:
 - Full House counts five-of-a-kind in BOTH rule sets (for Yacht Dice this is
   deliberate and evidence-backed — see the comparison doc's 325-max note).
 
+## CI images
+
+- **CI jobs do not install tooling at run time.** Every tool a job needs is
+  already in the image it pulls: `.github/docker/ci.Dockerfile` (Playwright
+  base + gh, jq, git, and a venv with the solver's numpy/tqdm), published by
+  `.github/workflows/ci-image.yml` and pinned by DIGEST in `CI_IMAGE`
+  (`.automation.conf`) and in the `container:` blocks of `pr.yml`/`pages.yml`.
+  If a job needs a tool it hasn't got, add it to the Dockerfile and repin —
+  never add an install step.
+- The rule is about *unpinned* tooling. Two accepted exceptions, both
+  deliberate: `npm ci` (project deps from a committed lockfile — pinning them
+  in the image would make it stale on every dependency change) and
+  `claude-code-action`, which bootstraps its own CLI and cannot be pinned
+  short of forking it.
+- Updating the image is inherently two commits — a commit that changes the
+  Dockerfile cannot reference the digest it produces. Push the Dockerfile
+  change, let `ci-image.yml` print the digest, then repin.
+- The Playwright base tag MUST match the playwright version in
+  `package.json`; on a mismatch `npm ci` silently re-downloads ~300 MB of
+  browsers at run time and quietly defeats the whole arrangement.
+
 ## Repo automation
 
 - Conventional commits are enforced by `.githooks/commit-msg` — run
