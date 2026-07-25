@@ -6,7 +6,9 @@ name: Claude
 
 on:
   issues:
-    types: [opened, labeled]
+    # 'closed' drives the status-label lifecycle to its terminal state (see
+    # the close-out job); every job below guards on the action it wants.
+    types: [opened, labeled, closed]
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -175,12 +177,12 @@ jobs:
           echo "Posted requirements comment: $COMMENT_URL"
           printf '## Requirements posted\n- issue: #%s\n- comment: %s\n' "$ISSUE" "$COMMENT_URL" >>"$GITHUB_STEP_SUMMARY"
 
-          # Deterministic labeling (not model-decided): a missing label on
-          # the repo must not fail the job — warn and move on. Run
-          # scripts/automation/setup-labels.sh once to create the labels.
-          if ! gh issue edit "$ISSUE" --add-label "status:requirements" 2>/tmp/label-err.txt; then
-            echo "::warning::could not apply label 'status:requirements' ($(cat /tmp/label-err.txt))"
-          fi
+          # Deterministic labeling (not model-decided). set-status.sh keeps
+          # the status:* labels mutually exclusive and creates them if the
+          # repo doesn't have them yet, so no manual setup-labels.sh run is
+          # needed first. Labeling must never fail the job — warn and move on.
+          scripts/automation/set-status.sh "$ISSUE" status:requirements \
+            || echo "::warning::could not set status:requirements on issue #$ISSUE (see log above)"
 
           # Map the issue-form "### Area" dropdown value to an area label via
           # AREA_LABEL_MAP in .automation.conf (repo-specific dropdown text
@@ -192,6 +194,7 @@ jobs:
             found && NF { print; exit }
           ')"
           if [ -n "$AREA_VALUE" ]; then
+            AREA_MATCHED=0
             OLD_IFS="$IFS"
             IFS=';'
             for pair in $AREA_LABEL_MAP; do
@@ -200,6 +203,7 @@ jobs:
               area_text="${pair%%=*}"
               area_label="${pair#*=}"
               if [ "$area_text" = "$AREA_VALUE" ]; then
+                AREA_MATCHED=1
                 if ! gh issue edit "$ISSUE" --add-label "$area_label" 2>/tmp/label-err.txt; then
                   echo "::warning::could not apply label '$area_label' ($(cat /tmp/label-err.txt))"
                 fi
@@ -208,7 +212,45 @@ jobs:
               IFS=';'
             done
             IFS="$OLD_IFS"
+            # A dropdown option with no mapping (e.g. "other") is normal; an
+            # unexplained miss means AREA_LABEL_MAP has drifted from the issue
+            # template, which is worth seeing in the log rather than guessing.
+            [ "$AREA_MATCHED" = 1 ] \
+              || echo "::notice::issue #$ISSUE area '$AREA_VALUE' has no AREA_LABEL_MAP entry — no area label applied"
+          else
+            # Free-form issues (filed without the issue form) have no '### Area'
+            # section at all, so they silently got no area label before this.
+            echo "::notice::issue #$ISSUE has no '### Area' section (filed without the issue form) — no area label applied"
           fi
+
+  # Terminal state of the status lifecycle: an issue closing (normally by a
+  # merged PR's "Closes #N", but a manual close counts too) means no status
+  # applies any more. Without this the issue keeps status:in-progress
+  # forever, which is what made the labels untrustworthy. Deterministic
+  # bookkeeping only — no Claude, so no ANTHROPIC_API_KEY gate here.
+  close-out:
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout (sparse — skips math/data)
+        uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
+      - name: Clear status labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          scripts/automation/set-status.sh "$ISSUE" none \
+            || echo "::warning::could not clear status labels on issue #$ISSUE (see log above)"
 
   # @claude mentions in issue/PR comments (humans only; bot comments never
   # retrigger — that also keeps the automation's own comments from looping).
@@ -542,8 +584,13 @@ jobs:
           # PAT or GitHub App installation token as a new repo secret.
           gh workflow run pr.yml --ref "$BRANCH" -f pr_number="$PR_NUMBER"
 
-          if ! gh issue edit "$ISSUE" --add-label status:in-progress --add-assignee "$SENDER" 2>/tmp/label-err.txt; then
-            echo "::warning::could not apply status:in-progress/assignee to issue #$ISSUE ($(cat /tmp/label-err.txt))"
+          # status:requirements -> status:in-progress, as a single exclusive
+          # transition (set-status.sh drops whatever other status:* labels the
+          # issue carries); the assignee is a separate, unrelated edit.
+          scripts/automation/set-status.sh "$ISSUE" status:in-progress \
+            || echo "::warning::could not set status:in-progress on issue #$ISSUE (see log above)"
+          if ! gh issue edit "$ISSUE" --add-assignee "$SENDER" 2>/tmp/label-err.txt; then
+            echo "::warning::could not assign issue #$ISSUE to $SENDER ($(cat /tmp/label-err.txt))"
           fi
           gh issue comment "$ISSUE" --body "Implementation PR: $PR_URL"
 
