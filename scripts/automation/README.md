@@ -47,7 +47,8 @@ authenticated, jq present — failing with an actionable one-liner
 | `changelog.sh [--from] [--to] [--version]` | grouped markdown changelog to stdout |
 | `release.sh [--dry-run] [--yes] [--version]` | tag + push + GitHub Release with generated notes |
 | `export-template.sh <dir> [--force]` | export the generic layer for a template repo; **fails if repo-specific words leak** |
-| `setup-labels.sh` | idempotently create/update the status/`implement`/`blocked`/area labels (see Label lifecycle below); never run automatically |
+| `set-status.sh <issue#> <status:LABEL\|none>` | move an issue to exactly one `status:*` label, removing the others; `none` clears them; creates missing labels and retries once; exit 1 if the edit still fails |
+| `setup-labels.sh` | idempotently create/update the status/`implement`/`blocked`/area labels (see Label lifecycle below); also invoked automatically by `set-status.sh` when a label is missing |
 
 Destructive/remote-mutating scripts (`pr-merge.sh`, `release.sh`) prompt for
 confirmation; `AUTOMATION_YES=1` (or `--yes`) skips the prompt — skills set it
@@ -90,8 +91,20 @@ tokens are replaced by the orchestrating skill, not by shell).
 ## Label lifecycle
 
 `scripts/automation/setup-labels.sh` idempotently creates every label below
-via `gh label create --force` (run it once per repo, and again after editing
-`AREA_LABEL_MAP`). It is never run automatically by a workflow or skill.
+via `gh label create --force`. Run it after editing `AREA_LABEL_MAP`; you no
+longer have to run it before the automation can label anything, because
+`set-status.sh` invokes it and retries when a label turns out to be missing.
+
+The `status:*` labels are a state machine, not tags: **exactly one applies at
+a time**, and every transition goes through `set-status.sh`, which removes
+the others. Nothing outside that script should add or remove a `status:*`
+label — `gh issue edit --add-label` alone can't express exclusivity, which is
+how issues ended up carrying two statuses (or keeping `status:in-progress`
+after they were done).
+
+```
+(new issue) --expand-issue--> status:requirements --implement job--> status:in-progress --issue closed--> (no status)
+```
 
 | label | applied by | meaning |
 |---|---|---|
@@ -99,7 +112,13 @@ via `gh label create --force` (run it once per repo, and again after editing
 | `area:*` (from `AREA_LABEL_MAP`) | same as above, parsed from the issue's `### Area` dropdown value | which part of the repo the issue touches |
 | `implement` | a human, added manually to a requirements-bearing issue | triggers `claude.yml`'s `implement` job |
 | `status:in-progress` | `issue-flow` Phase 2 locally; `claude.yml`'s `implement` job when it opens the PR | implementation underway on a branch/PR |
-| `blocked` | a human | blocked on a decision or external dependency |
+| *(no status)* | `claude.yml`'s `close-out` job, on `issues: closed` | done — a merged PR's `Closes #N`, or a manual close |
+| `blocked` | a human | blocked on a decision or external dependency (orthogonal to `status:*`, never touched by `set-status.sh`) |
+
+Issues filed **without** the issue form have no `### Area` section, so they
+get no `area:*` label; the `expand-issue` job now says so in an `::notice::`
+rather than skipping silently, as it does for a dropdown value that has no
+`AREA_LABEL_MAP` entry.
 
 `AREA_LABEL_MAP` in `.automation.conf` maps each issue-template `### Area`
 dropdown option (`.github/ISSUE_TEMPLATE/*.yml`) to a label, e.g.
@@ -115,8 +134,10 @@ requirements to `/tmp/issue-context.md`, runs Claude with file tools only
 (no Bash) to make the change, then deterministically normalizes + lints the
 title, brands a `<type>/<N>-ci-<slug>` branch, commits, pushes, opens a PR,
 dispatches `pr.yml` for it (see that workflow's `workflow_dispatch` trigger
-for why), and swaps `implement` for `status:in-progress` + an assignee on the
-issue. If Claude reports it couldn't implement the change, or the
+for why), and swaps `implement` for `status:in-progress` (via `set-status.sh`,
+so `status:requirements` comes off in the same transition) + an assignee on
+the issue. When that PR merges and closes the issue, the `close-out` job
+clears the status label. If Claude reports it couldn't implement the change, or the
 requirements comment is missing, the job fails with an `::error::` explaining
 why instead of opening an empty PR. When the job fails *after* Claude has
 edited the tree (unpushable `.github/workflows/**`, an unrepairable title, a

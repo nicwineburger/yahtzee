@@ -28,8 +28,10 @@ never skips.
 
 1. Type: `feat` for enhancements, `fix` for bugs (judge from the issue).
    `scripts/automation/branch.sh <type> <N> <short-slug>`.
-2. `gh issue edit <N> --add-label status:in-progress --add-assignee @me`
-   (swaps out `implement`/`status:requirements` as work actually starts).
+2. `scripts/automation/set-status.sh <N> status:in-progress` then
+   `gh issue edit <N> --add-assignee @me` (the script drops
+   `status:requirements` in the same transition — exactly one `status:*`
+   label applies at a time, so never add one with `gh issue edit`).
 3. Spawn the `implementer` subagent (Agent tool, subagent_type `implementer`)
    with a prompt containing, verbatim: the full requirements comment, the
    relevant CLAUDE.md conventions, and the instruction to follow its TDD and
@@ -86,7 +88,8 @@ fails 3 times on the same cause, stop and escalate to the user.
    issues (`gh issue create`) rather than leaving TODOs in text.
 3. `Closes #N` normally auto-closes; check state and `gh issue close <N>` if
    still open.
-4. `gh issue edit <N> --remove-label status:in-progress` — the issue is
-   closed, not in progress.
+4. `scripts/automation/set-status.sh <N> none` — the issue is closed, not in
+   progress. `claude.yml`'s `close-out` job usually beats you to this on
+   close; the script is idempotent, so run it anyway.
 5. Tell the user: merged PR, conclusion link, and what a release would look
    like now (`scripts/automation/next-version.sh` output).

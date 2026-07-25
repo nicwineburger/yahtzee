@@ -27,12 +27,14 @@ the issue itself. Usage: `/expand-issue <issue#>`.
    - Update: find the comment id
      (`gh api repos/{owner}/{repo}/issues/<N>/comments --jq '.[] | select(.body | startswith("<!-- claude:requirements")) | .id'`)
      then `gh api repos/{owner}/{repo}/issues/comments/<id> -X PATCH -F body=@<file>`
-6. **Label.** `gh issue edit <N> --add-label status:requirements`. Then read
-   the issue's `### Area` dropdown value and look it up in `AREA_LABEL_MAP`
-   (`.automation.conf`); if it maps to a label, add that too
-   (`gh issue edit <N> --add-label <label>`). If a label doesn't exist on
-   the repo yet, run `scripts/automation/setup-labels.sh` once rather than
-   skipping it.
+6. **Label.** `scripts/automation/set-status.sh <N> status:requirements`
+   (never `gh issue edit --add-label` for a `status:*` label — only one
+   applies at a time, and the script enforces that plus creates the label if
+   the repo lacks it). Then read the issue's `### Area` dropdown value and
+   look it up in `AREA_LABEL_MAP` (`.automation.conf`); if it maps to a
+   label, add that too (`gh issue edit <N> --add-label <label>`) — area
+   labels are ordinary tags. A free-form issue has no `### Area` section;
+   say so rather than guessing an area.
 7. **Report.** Give the user the comment URL. If any Open Questions are
    blocking, surface them explicitly — implementation must not start on
    guessed answers.
