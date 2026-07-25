@@ -1,0 +1,92 @@
+name: CI image
+
+# Builds and publishes the image every other workflow's jobs pull, so that no
+# job installs tooling at run time. See .github/docker/ci.Dockerfile.
+#
+# Bootstrap/update procedure (this is inherent, not a one-off — a PR that
+# changes the Dockerfile cannot reference the digest it produces, because that
+# digest does not exist until after this workflow pushes):
+#   1. land/push the Dockerfile change -> this workflow builds and prints the
+#      new digest in its run summary
+#   2. update CI_IMAGE in .automation.conf and the `container:` references in
+#      pr.yml / pages.yml to that digest, as a separate commit
+# It runs on any branch so a change can be verified before it reaches main.
+
+on:
+  push:
+    paths:
+      - ".github/docker/ci.Dockerfile"
+      - ".github/workflows/ci-image.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # Sparse checkout: the build context needs the Dockerfile, not the
+      # 2.5 GiB math/data pack (see claude.yml for why that exclusion exists).
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
+
+      - name: Log in to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        id: build
+        run: |
+          # ghcr requires a lowercase path; the repo slug may not be.
+          IMAGE="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')-ci"
+          SHA_TAG="sha-${GITHUB_SHA:0:12}"
+
+          docker build \
+            -f .github/docker/ci.Dockerfile \
+            -t "$IMAGE:$SHA_TAG" \
+            .github/docker
+
+          docker push "$IMAGE:$SHA_TAG"
+
+          # A moving :main tag for humans; nothing in CI consumes it.
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker tag "$IMAGE:$SHA_TAG" "$IMAGE:main"
+            docker push "$IMAGE:main"
+          fi
+
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:$SHA_TAG")"
+          printf 'digest=%s\n' "$DIGEST" >>"$GITHUB_OUTPUT"
+          printf 'image=%s\n' "$IMAGE" >>"$GITHUB_OUTPUT"
+
+      - name: Report the digest to pin
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          {
+            printf '## CI image published\n\n- `%s`\n\n' "$DIGEST"
+            printf 'Pin it by digest (a tag is mutable; a digest is not):\n\n'
+            printf '```\n# .automation.conf\nCI_IMAGE="%s"\n```\n\n' "$DIGEST"
+            printf 'and the same value in the `container: image:` lines of '
+            printf '`pr.yml` / `pages.yml`.\n\n### Tool versions baked in\n\n```\n'
+            docker run --rm --entrypoint sh "$DIGEST" -c '
+              git --version
+              node --version
+              gh --version | head -n1
+              jq --version
+              python3 -c "import numpy, tqdm; print(\"numpy\", numpy.__version__, \"tqdm\", tqdm.__version__)"
+            '
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
