@@ -36,9 +36,24 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
       git \
       curl \
       ca-certificates \
+      unzip \
       python3 \
       python3-venv \
  && rm -rf /var/lib/apt/lists/*
+
+# unzip is not optional: claude-code-action bootstraps its runtime through
+# oven-sh/setup-bun, which downloads bun-linux-x64.zip and shells out to
+# unzip. ubuntu-latest runners ship it, so its absence only surfaces once a
+# job moves into a container (run 30161240812: "Unable to locate executable
+# file: unzip" -> "bun: command not found" -> exit 127).
+
+# The workspace is bind-mounted from the runner and owned by a different uid
+# than this image's root, so git refuses to touch it ("detected dubious
+# ownership") — which breaks not just git but `gh`, since gh shells out to
+# git. That took out the implement job's label bookkeeping and would have
+# taken out its commit/push too (same run). Every consumer of this image hits
+# it, so it is fixed once here rather than per workflow.
+RUN git config --system --add safe.directory '*'
 
 # Solver dependencies, exact versions. Bump = edit here, rebuild, repin.
 ARG NUMPY_VERSION=2.5.1
@@ -55,13 +70,20 @@ ENV PATH="/opt/venv/bin:$PATH"
 # git especially: without it actions/checkout silently falls back to a REST
 # tarball that ignores sparse-checkout/filter — which here means dragging in
 # the 2.5 GiB math/data pack and leaving no .git for release.sh to work with.
+# Capture into a variable before trimming: `cmd --version | head -n1` gives the
+# writer SIGPIPE once head exits, which under `pipefail` + `set -e` fails the
+# build with 141 for a tool that is present and fine (it did — unzip's banner
+# is long enough to still be writing). Assert presence separately from
+# printing versions.
 RUN set -eux; \
-    git --version; \
-    curl --version | head -n1; \
-    node --version; \
-    npm --version; \
-    jq --version; \
-    gh --version; \
-    gh --version | awk 'NR==1 { split($3, v, "."); exit (v[1] * 10000 + v[2] * 100 + v[3] >= 24000) ? 0 : 1 }'; \
+    for tool in git curl node npm jq unzip gh python3; do \
+      command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }; \
+    done; \
+    versions="$(git --version; curl --version; node --version; npm --version; jq --version; unzip -v; gh --version)"; \
+    printf '%s\n' "$versions" | grep -E '^(git|curl|jq|gh|UnZip|v[0-9])' || true; \
+    git config --system --get-all safe.directory; \
+    gh_version="$(gh --version)"; \
+    printf '%s\n' "$gh_version" | awk 'NR==1 { split($3, v, "."); exit (v[1] * 10000 + v[2] * 100 + v[3] >= 24000) ? 0 : 1 }'; \
     python3 -c "import numpy, tqdm; print('numpy', numpy.__version__, 'tqdm', tqdm.__version__)"; \
-    npx playwright --version
+    ls -1 "${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}" | head -n5; \
+    test -n "$(ls -A "${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}" 2>/dev/null)"

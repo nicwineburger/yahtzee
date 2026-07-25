@@ -23,7 +23,7 @@ jobs:
     # in (.github/docker/ci.Dockerfile), nothing installed at run time. Pinned
     # by digest; keep in sync with CI_IMAGE in .automation.conf.
     container:
-      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:23def4896a8d7f259b3fa17a1c8161d7d031dabad292037c66737c1062ae96bc
+      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:fbbe2340f738d780849c0f4390e096501143c0c66002db56855d70794a458230
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:23def4896a8d7f259b3fa17a1c8161d7d031dabad292037c66737c1062ae96bc
+      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:fbbe2340f738d780849c0f4390e096501143c0c66002db56855d70794a458230
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
