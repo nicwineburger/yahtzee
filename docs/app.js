@@ -228,10 +228,16 @@ function scoreAdviceHTML(best, alts, stay, opts = {}) {
       <p class="advice-sub">Expected final haul from here: ${fmt(best.ev)} pts</p>
       <button class="apply-btn" id="adviceApplyBtn">${buttonLabel}</button>
       ${alts.length ? `<details class="more"><summary>${altSummary}</summary>
-        <ul class="alts">${alts.map((a, i) =>
-          `<li><button class="alt-btn" data-alt="${i}">
-             <span class="what">${a.name} · ${a.pts} pts</span>
-             <span class="delta">−${fmt(best.ev - a.ev)}</span></button></li>`).join("")}
+        <ul class="alts">${alts.map((a, i) => {
+          // The optimal box reappears here (instead of being unconditionally
+          // sliced off) once the player has deviated, so there's always a
+          // way back to it from this same list — see docs/app.js's
+          // scorePickInfo callers.
+          const rec = a.cat === best.cat;
+          return `<li><button class="alt-btn${rec ? " recommended" : ""}" data-alt="${i}">
+             <span class="what">${a.name} · ${a.pts} pts${rec ? ` <span class="rec-tag">recommended</span>` : ""}</span>
+             <span class="delta">${rec ? "back to optimal" : `−${fmt(best.ev - a.ev)}`}</span></button></li>`;
+        }).join("")}
         </ul></details>` : ""}
     </div>`;
 }
@@ -249,10 +255,12 @@ function keepAdviceHTML(best, alts, dice, applyLabel, chipHTML = "") {
       <p class="advice-sub">Expected final haul from here: ${fmt(best.ev)} pts</p>
       ${applyLabel ? `<button class="apply-btn" id="adviceApplyBtn">${applyLabel}</button>` : ""}
       ${alts.length ? `<details class="more"><summary>Other keeps — tap to keep instead</summary>
-        <ul class="alts">${alts.map((a, i) =>
-          `<li><button class="alt-btn" data-alt="${i}">
-             <span class="what">${miniDiceHTML(a.keepValues)}</span>
-             <span class="delta">−${fmt(best.ev - a.ev)}</span></button></li>`).join("")}
+        <ul class="alts">${alts.map((a, i) => {
+          const rec = a.keepVec.every((c, f) => c === best.keepVec[f]);
+          return `<li><button class="alt-btn${rec ? " recommended" : ""}" data-alt="${i}">
+             <span class="what">${miniDiceHTML(a.keepValues)}${rec ? ` <span class="rec-tag">recommended</span>` : ""}</span>
+             <span class="delta">${rec ? "back to optimal" : `−${fmt(best.ev - a.ev)}`}</span></button></li>`;
+        }).join("")}
       </ul></details>` : ""}
     </div>`;
 }
@@ -502,6 +510,9 @@ function renderPlay() {
   const pickInfo = scorePickInfo(adv);
   const contrib = pickInfo ? contributingDice(play.dice, pickInfo.pick) : null;
   const pickDeviates = pickInfo && pickInfo.pick !== pickInfo.best.cat;
+  // No rerolls left at the final roll — holding is meaningless, so dice stop
+  // being toggle controls and must stop looking/acting like ones.
+  const finalRoll = play.rollsUsed >= 3;
 
   const row = $("playDiceRow");
   row.innerHTML = "";
@@ -511,16 +522,18 @@ function renderPlay() {
       let cls = "die" + (rolling ? " rolling" : "");
       if (pickInfo) {
         cls += (contrib[i] ? " kept" : "") + (contrib[i] && pickDeviates ? " deviate" : "");
-      } else {
+      } else if (!finalRoll) {
         cls += (play.held[i] ? " kept" : "") + (play.held[i] && deviating ? " deviate" : "");
       }
       const b = document.createElement("button");
       b.className = cls;
       b.innerHTML = dieSVG(play.dice[i], 52);
+      b.disabled = finalRoll;
       b.setAttribute("aria-label", rolling ? "Die rolling" :
         pickInfo ? `Die ${play.dice[i]}${contrib[i] ? ", counts toward the picked box" : ""}` :
+        finalRoll ? `Die ${play.dice[i]} — no rerolls left` :
         `Die ${play.dice[i]}, ${play.held[i] ? "held" : "not held"} — tap to toggle`);
-      b.onclick = () => playToggleHold(i);
+      if (!finalRoll) b.onclick = () => playToggleHold(i);
       row.appendChild(b);
     } else {
       const d = document.createElement("div");
@@ -614,7 +627,13 @@ function renderPlayAdvice(p) {
   if (adv.kind === "score" || (adv.kind === "keep" && adv.best.nKept === 5)) {
     const info = scorePickInfo(adv);
     const { best, pick, pickRow } = info;
-    const alts = info.ranking.slice(1, 5);
+    const deviated = pick !== best.cat;
+    // Once deviated, keep the optimal box reachable from this same list
+    // (marked "recommended" by scoreAdviceHTML) instead of dropping it —
+    // only the currently-active pick itself is excluded.
+    const alts = deviated
+      ? info.ranking.filter((r) => r.cat !== pick).slice(0, 4)
+      : info.ranking.slice(1, 5);
     const stay = adv.kind === "keep" ? "Stop rolling — score" : "Score";
     const chip = pick !== best.cat
       ? `<span class="over-chip">Your pick: ${pickRow.name} · −${fmt(best.ev - pickRow.ev)} pts</span>`
@@ -632,7 +651,15 @@ function renderPlayAdvice(p) {
   }
 
   const best = adv.best;
-  const alts = adv.alternatives.slice(1, 4);
+  const heldVec = [0, 0, 0, 0, 0, 0];
+  play.dice.filter((f, i) => play.held[i]).forEach((f) => heldVec[f - 1]++);
+  const deviatedKeep = !best.keepVec.every((c, f) => c === heldVec[f]);
+  // Same list-based fix as the score stage: once the hold deviates from the
+  // recommended keep, the recommended keep stays reachable from "Other
+  // keeps" (marked "recommended") instead of being dropped as index 0.
+  const alts = deviatedKeep
+    ? adv.alternatives.filter((r) => !r.keepVec.every((c, f) => c === heldVec[f])).slice(0, 3)
+    : adv.alternatives.slice(1, 4);
   const chip = overrideChipHTML(adv);
   // Auto-hold keeps the dice matching the advice, so the apply button is only
   // needed as a way back after the player deviates.
