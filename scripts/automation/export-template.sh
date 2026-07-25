@@ -47,6 +47,14 @@ TEST_CMD="echo 'set TEST_CMD in .automation.conf' && exit 1"
 # EDIT ME: optional secondary suite ("" = none).
 MATH_TEST_CMD=""
 
+# EDIT ME: the same suites as claude.yml's implement job runs on a CI runner
+# before it pushes, plus whatever install/setup that runner needs first (the
+# runner has no local venv and no preinstalled browsers). CI_TEST_SETUP
+# failing is not fatal — it only means Claude can't self-verify that run.
+CI_TEST_SETUP="echo 'no CI test setup configured'"
+CI_TEST_CMD="$TEST_CMD"
+CI_MATH_TEST_CMD=""
+
 COMMIT_TYPES="feat fix docs style refactor perf test build ci chore revert"
 COMMIT_SCOPES=""
 SUBJECT_MAX_LEN=72

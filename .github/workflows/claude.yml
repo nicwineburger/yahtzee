@@ -381,7 +381,28 @@ jobs:
           {
             printf 'subject_max_len=%s\n' "$SUBJECT_MAX_LEN"
             printf 'branch_types=%s\n' "$BRANCH_TYPES"
+            printf 'ci_test_cmd=%s\n' "$CI_TEST_CMD"
+            printf 'ci_math_test_cmd=%s\n' "$CI_MATH_TEST_CMD"
           } >>"$GITHUB_OUTPUT"
+      - if: steps.key.outputs.present == 'true'
+        id: testenv
+        name: Prepare test environment
+        # Claude can only verify its own change if the suites can actually
+        # run here: deps installed, and the browsers the UI tests drive
+        # present (the runner is not the Playwright container pr.yml's test
+        # job uses). Never fatal — a registry hiccup shouldn't kill a run
+        # that can still produce a correct change; Claude is told to say so
+        # when it couldn't test, and pr.yml remains the real gate.
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: ""
+        run: |
+          . "$GITHUB_WORKSPACE/.automation.conf"
+          if eval "$CI_TEST_SETUP"; then
+            echo "ready=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            echo "::warning::test environment setup failed — Claude will not be able to run the suite in this run"
+          fi
       - if: steps.key.outputs.present == 'true'
         id: claude
         name: Implement change in working tree (Claude)
@@ -400,11 +421,20 @@ jobs:
             implementation and obey them exactly. Include tests per the
             requirements' test plan.
 
-            You have no Bash access in this run — file tools only
-            (Read/Grep/Glob/Write/Edit). Do NOT attempt to run git, gh, or
-            any tests yourself; a deterministic workflow step handles
-            branch/commit/push/PR after you finish. Just edit the working
-            tree to make the change complete and correct.
+            VERIFY YOUR CHANGE BEFORE FINISHING. Test environment ready:
+            ${{ steps.testenv.outputs.ready }}. When that says true, run
+            `${{ steps.conf.outputs.ci_test_cmd }}` and keep working until it
+            passes; if you touched the secondary suite's area, also run
+            `${{ steps.conf.outputs.ci_math_test_cmd }}`. A failing test you
+            caused is yours to fix — including an EXISTING test that your
+            change makes wrong: update it to assert the new intended
+            behavior, don't leave it failing and don't weaken it to pass.
+            When it says false, skip the commands and say so in `tests`.
+
+            Bash is limited to running tests and their tooling (npm, npx,
+            node, python3). Do NOT run git or gh — a deterministic workflow
+            step handles branch/commit/push/PR after you finish, and that
+            split is what keeps this job's git history trustworthy.
 
             Set the structured output:
             - implemented: true only if you actually made the changes in the
@@ -423,11 +453,15 @@ jobs:
               * no trailing period.
             - summary: the PR body as markdown, with `## Summary`,
               `## Changes`, and `## Test plan` sections.
+            - tests: one line stating the exact command(s) you ran and the
+              result, or why you ran none. Report this honestly — it is
+              published on the PR, and pr.yml re-runs the same suite anyway.
             - reason: why implementation failed or was skipped; empty string
               if implemented is true.
           claude_args: |
-            --allowedTools "Read,Grep,Glob,Write,Edit"
-            --json-schema '{"type":"object","properties":{"implemented":{"type":"boolean","description":"true only if the working tree was actually changed"},"pr_title":{"type":"string","description":"conventional commit subject describing the whole change; type from [${{ steps.conf.outputs.branch_types }}], at most ${{ steps.conf.outputs.subject_max_len }} characters including the type/scope prefix, no trailing period"},"summary":{"type":"string","description":"markdown PR body: Summary/Changes/Test plan"},"reason":{"type":"string","description":"why implementation failed or was skipped; empty string if implemented is true"}},"required":["implemented","pr_title","summary","reason"]}'
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(python3:*),Bash(cd:*)"
+            --disallowedTools "Bash(git:*),Bash(gh:*)"
+            --json-schema '{"type":"object","properties":{"implemented":{"type":"boolean","description":"true only if the working tree was actually changed"},"pr_title":{"type":"string","description":"conventional commit subject describing the whole change; type from [${{ steps.conf.outputs.branch_types }}], at most ${{ steps.conf.outputs.subject_max_len }} characters including the type/scope prefix, no trailing period"},"summary":{"type":"string","description":"markdown PR body: Summary/Changes/Test plan"},"tests":{"type":"string","description":"exact test command(s) run and their result, or why none were run"},"reason":{"type":"string","description":"why implementation failed or was skipped; empty string if implemented is true"}},"required":["implemented","pr_title","summary","tests","reason"]}'
       - name: Claude execution summary
         # Always runs (even when the Claude step fails) so the run's Summary
         # page says what Claude actually did: turns, cost, duration, result.
@@ -561,10 +595,15 @@ jobs:
 
           git push -u origin "$BRANCH"
 
+          # What Claude reports running is published verbatim rather than
+          # trusted silently — pr.yml re-runs the same suite on this PR, so a
+          # claim here that doesn't match reality is visible immediately.
+          PR_TESTS="$(printf '%s' "$OUTPUT" | jq -r '.tests // ""')"
           PR_BODY_FILE="$(mktemp)"
           {
             printf '%s\n\n' "$PR_SUMMARY"
             printf 'Closes #%s\n' "$ISSUE"
+            [ -z "$PR_TESTS" ] || printf '\n---\n<sub>Tests run in the implement job: %s</sub>\n' "$PR_TESTS"
           } >"$PR_BODY_FILE"
           gh pr create --base "$DEFAULT_BRANCH" --title "$PR_TITLE" --body-file "$PR_BODY_FILE"
           rm -f "$PR_BODY_FILE"
@@ -596,7 +635,7 @@ jobs:
 
           echo "Opened PR: $PR_URL"
           {
-            printf '## Implementation PR opened\n- issue: #%s\n- branch: %s\n- PR: %s\n\n### Diffstat\n\n```\n' "$ISSUE" "$BRANCH" "$PR_URL"
+            printf '## Implementation PR opened\n- issue: #%s\n- branch: %s\n- PR: %s\n- tests: %s\n\n### Diffstat\n\n```\n' "$ISSUE" "$BRANCH" "$PR_URL" "${PR_TESTS:-(not reported)}"
             git show --stat --format='' HEAD
             printf '```\n'
           } >>"$GITHUB_STEP_SUMMARY"

@@ -83,7 +83,8 @@ Two halves, one repo:
 - Deterministic tooling lives in `scripts/automation/` (interfaces, exit
   codes, and comment-marker conventions in its README). Orchestration skills:
   `/issue-flow`, `/expand-issue`, `/pr-fix`, `/release`, `/tdd`.
-- Implementation work is delegated to the `implementer` subagent (Sonnet);
+- Implementation work is delegated to the `implementer` subagent (Opus 5 at
+  `high` effort; the main agent plans/reviews on Fable at `xhigh`);
   the main agent orchestrates and reviews — review is never delegated.
 - The generic layer is template-exportable via
   `scripts/automation/export-template.sh` — keep repo-specific values in

@@ -131,7 +131,9 @@ has a `<!-- claude:requirements` comment (from `expand-issue`) -> the
 `implement` job in `claude.yml` fires (`issues: labeled`), immediately
 removes the label (re-adding it later retries the run), writes the issue +
 requirements to `/tmp/issue-context.md`, runs Claude with file tools only
-(no Bash) to make the change, then deterministically normalizes + lints the
+(Bash limited to test commands — `git`/`gh` are denied, so the model edits
+and verifies while the workflow owns every write to the repo) to make the
+change, then deterministically normalizes + lints the
 title, brands a `<type>/<N>-ci-<slug>` branch, commits, pushes, opens a PR,
 dispatches `pr.yml` for it (see that workflow's `workflow_dispatch` trigger
 for why), and swaps `implement` for `status:in-progress` (via `set-status.sh`,
@@ -144,6 +146,17 @@ edited the tree (unpushable `.github/workflows/**`, an unrepairable title, a
 branch collision, `gh pr create` denied by repo settings), the diff is
 uploaded as a `claude-implementation-patch-*` artifact so the work can be
 `git apply`-ed locally instead of re-run from scratch.
+
+Before Claude runs, the job installs the test dependencies named by
+`CI_TEST_SETUP` in `.automation.conf` (deps, browsers, whatever the suites
+need — the runner is not the container `pr.yml`'s test job uses) and tells
+Claude whether that succeeded. Claude is expected to run `CI_TEST_CMD` and
+fix what it breaks — including an existing test its change makes wrong —
+before the workflow commits anything, and reports the command(s) it ran in
+the structured output's `tests` field, which is published verbatim on the PR
+and in the run summary. That claim is checkable rather than trusted: `pr.yml`
+re-runs the same suite on the PR. A setup failure is non-fatal — the change
+still gets made and reviewed, it just arrives unverified.
 
 ## Event-driven triggering
 
