@@ -70,15 +70,19 @@ ENV PATH="/opt/venv/bin:$PATH"
 # git especially: without it actions/checkout silently falls back to a REST
 # tarball that ignores sparse-checkout/filter — which here means dragging in
 # the 2.5 GiB math/data pack and leaving no .git for release.sh to work with.
+# Capture into a variable before trimming: `cmd --version | head -n1` gives the
+# writer SIGPIPE once head exits, which under `pipefail` + `set -e` fails the
+# build with 141 for a tool that is present and fine (it did — unzip's banner
+# is long enough to still be writing). Assert presence separately from
+# printing versions.
 RUN set -eux; \
-    git --version; \
-    curl --version | head -n1; \
-    node --version; \
-    npm --version; \
-    jq --version; \
-    unzip -v | head -n1; \
-    gh --version; \
+    for tool in git curl node npm jq unzip gh python3; do \
+      command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }; \
+    done; \
+    versions="$(git --version; curl --version; node --version; npm --version; jq --version; unzip -v; gh --version)"; \
+    printf '%s\n' "$versions" | grep -E '^(git|curl|jq|gh|UnZip|v[0-9])' || true; \
     git config --system --get-all safe.directory; \
-    gh --version | awk 'NR==1 { split($3, v, "."); exit (v[1] * 10000 + v[2] * 100 + v[3] >= 24000) ? 0 : 1 }'; \
+    gh_version="$(gh --version)"; \
+    printf '%s\n' "$gh_version" | awk 'NR==1 { split($3, v, "."); exit (v[1] * 10000 + v[2] * 100 + v[3] >= 24000) ? 0 : 1 }'; \
     python3 -c "import numpy, tqdm; print('numpy', numpy.__version__, 'tqdm', tqdm.__version__)"; \
     npx playwright --version
