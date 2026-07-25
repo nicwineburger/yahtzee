@@ -36,9 +36,24 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
       git \
       curl \
       ca-certificates \
+      unzip \
       python3 \
       python3-venv \
  && rm -rf /var/lib/apt/lists/*
+
+# unzip is not optional: claude-code-action bootstraps its runtime through
+# oven-sh/setup-bun, which downloads bun-linux-x64.zip and shells out to
+# unzip. ubuntu-latest runners ship it, so its absence only surfaces once a
+# job moves into a container (run 30161240812: "Unable to locate executable
+# file: unzip" -> "bun: command not found" -> exit 127).
+
+# The workspace is bind-mounted from the runner and owned by a different uid
+# than this image's root, so git refuses to touch it ("detected dubious
+# ownership") — which breaks not just git but `gh`, since gh shells out to
+# git. That took out the implement job's label bookkeeping and would have
+# taken out its commit/push too (same run). Every consumer of this image hits
+# it, so it is fixed once here rather than per workflow.
+RUN git config --system --add safe.directory '*'
 
 # Solver dependencies, exact versions. Bump = edit here, rebuild, repin.
 ARG NUMPY_VERSION=2.5.1
@@ -61,7 +76,9 @@ RUN set -eux; \
     node --version; \
     npm --version; \
     jq --version; \
+    unzip -v | head -n1; \
     gh --version; \
+    git config --system --get-all safe.directory; \
     gh --version | awk 'NR==1 { split($3, v, "."); exit (v[1] * 10000 + v[2] * 100 + v[3] >= 24000) ? 0 : 1 }'; \
     python3 -c "import numpy, tqdm; print('numpy', numpy.__version__, 'tqdm', tqdm.__version__)"; \
     npx playwright --version
