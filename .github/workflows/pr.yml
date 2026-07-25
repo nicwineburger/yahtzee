@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Blob-filtered sparse checkout — skips the 2.5 GiB math/data pack (see claude.yml).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           filter: blob:none
           sparse-checkout: |
@@ -60,10 +60,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Every tool this job needs is already in the image (see
+    # .github/docker/ci.Dockerfile) — it installs nothing but this project's
+    # own lockfile-pinned deps. Pinned by digest: tags are mutable.
+    # Keep in sync with CI_IMAGE in .automation.conf and pages.yml.
     container:
-      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:23def4896a8d7f259b3fa17a1c8161d7d031dabad292037c66737c1062ae96bc
+      # GITHUB_TOKEN-pushed ghcr packages are private by default; these
+      # credentials make the pull work whether or not the package is public.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: npm ci
       - name: Engine regression test vs Python-solver fixtures
         run: npm run test:engine
@@ -75,12 +84,16 @@ jobs:
   test-math:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Python + numpy/tqdm come from the image, so this job no longer needs
+    # setup-python or a pip install whose versions float to whatever the index
+    # serves that minute.
+    container:
+      image: ghcr.io/nicwineburger/yahtzee-ci@sha256:23def4896a8d7f259b3fa17a1c8161d7d031dabad292037c66737c1062ae96bc
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install numpy tqdm
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Solver + export tests
-        run: python test_yacht_clubhouse.py
+        run: python3 test_yacht_clubhouse.py
         working-directory: math

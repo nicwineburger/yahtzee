@@ -33,7 +33,7 @@ jobs:
     steps:
       # Sparse checkout: the build context needs the Dockerfile, not the
       # 2.5 GiB math/data pack (see claude.yml for why that exclusion exists).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           filter: blob:none
           sparse-checkout: |

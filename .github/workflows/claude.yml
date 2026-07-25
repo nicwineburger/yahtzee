@@ -45,7 +45,7 @@ jobs:
         # of that pack once took 18 minutes (run 30108055561). The exclude
         # pattern is harmless in repos without the path (template export:
         # EDIT to match your repo's large committed data dirs, or drop).
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           filter: blob:none
           sparse-checkout: |
@@ -62,7 +62,7 @@ jobs:
       - if: steps.key.outputs.present == 'true'
         id: claude
         name: Expand issue into requirements (Claude)
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -132,7 +132,7 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Upload Claude execution log
         if: always() && steps.key.outputs.present == 'true' && steps.claude.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: claude-execution-expand-issue-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -237,7 +237,7 @@ jobs:
       issues: write
     steps:
       - name: Checkout (sparse — skips math/data)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           filter: blob:none
           sparse-checkout: |
@@ -279,7 +279,7 @@ jobs:
       - if: steps.key.outputs.present == 'true'
         name: Checkout (sparse — skips math/data)
         # Same blob-filtered sparse checkout as expand-issue (math/data excluded).
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           filter: blob:none
@@ -289,7 +289,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - if: steps.key.outputs.present == 'true'
         name: Answer @claude mention (Claude)
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -299,18 +299,61 @@ jobs:
           claude_args: |
             --allowedTools "Bash(scripts/automation/*.sh:*),Bash(./scripts/automation/*.sh:*)"
 
+  # Reads CI_IMAGE out of .automation.conf so the implement job below can run
+  # in it. This job exists because `container: image:` is resolved before any
+  # step runs, so it cannot source a shell config file itself — but it CAN
+  # read the `needs` context, which is how the repo-specific image reference
+  # stays in .automation.conf (the one per-repo file) instead of being
+  # hardcoded here, where it would also break the template export's leak check.
+  ci-image:
+    if: >-
+      github.event_name == 'issues' && github.event.action == 'labeled' &&
+      github.event.label.name == 'implement' &&
+      github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      image: ${{ steps.read.outputs.image }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/math/data/
+          sparse-checkout-cone-mode: false
+      - id: read
+        run: |
+          . "$GITHUB_WORKSPACE/.automation.conf"
+          if [ -z "${CI_IMAGE:-}" ]; then
+            echo "::error::CI_IMAGE is not set in .automation.conf — the implement job runs inside an image that carries the repo's tooling (node, browsers, python deps, gh). Build one with .github/workflows/ci-image.yml and pin its digest there."
+            exit 1
+          fi
+          printf 'image=%s\n' "$CI_IMAGE" >>"$GITHUB_OUTPUT"
+
   # `implement` label added to a requirements-bearing issue -> implement the
   # change on a branch and open a PR. Same "model edits, workflow does the
-  # git" split as expand-issue: Claude gets file tools only (no Bash), and
-  # deterministic steps do branch/commit/push/PR with a lint-checked
+  # git" split as expand-issue: Claude gets file tools plus test-running Bash,
+  # and deterministic steps do branch/commit/push/PR with a lint-checked
   # conventional title taken from structured output.
   implement:
+    needs: [ci-image]
     if: >-
       github.event_name == 'issues' && github.event.action == 'labeled' &&
       github.event.label.name == 'implement' &&
       github.event.sender.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Runs inside the repo's CI image so the suites Claude is asked to run,
+    # and the gh/git this job needs afterwards, are all present without
+    # installing anything mid-run.
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
       issues: write
@@ -332,7 +375,7 @@ jobs:
       - if: steps.key.outputs.present == 'true'
         name: Checkout (sparse — skips math/data)
         # Same blob-filtered sparse checkout as expand-issue (math/data excluded).
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           filter: blob:none
@@ -387,14 +430,10 @@ jobs:
       - if: steps.key.outputs.present == 'true'
         id: testenv
         name: Prepare test environment
-        # Claude can only verify its own change if the suites can actually
-        # run here: deps installed, and the browsers the UI tests drive
-        # present (the runner is not the Playwright container pr.yml's test
-        # job uses). Never fatal — a registry hiccup shouldn't kill a run
-        # that can still produce a correct change; Claude is told to say so
-        # when it couldn't test, and pr.yml remains the real gate.
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: ""
+        # Tooling (browsers, python, numpy/tqdm) comes from the image, so this
+        # is project dependencies only. Never fatal — a registry hiccup
+        # shouldn't kill a run that can still produce a correct change; Claude
+        # is told to say so when it couldn't test, and pr.yml is the real gate.
         run: |
           . "$GITHUB_WORKSPACE/.automation.conf"
           if eval "$CI_TEST_SETUP"; then
@@ -406,7 +445,7 @@ jobs:
       - if: steps.key.outputs.present == 'true'
         id: claude
         name: Implement change in working tree (Claude)
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -491,7 +530,7 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Upload Claude execution log
         if: always() && steps.key.outputs.present == 'true' && steps.claude.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: claude-execution-implement-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -664,7 +703,7 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Upload implementation patch
         if: failure() && steps.key.outputs.present == 'true' && steps.claude.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: claude-implementation-patch-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp/implementation.patch

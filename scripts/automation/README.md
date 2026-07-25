@@ -158,6 +158,50 @@ and in the run summary. That claim is checkable rather than trusted: `pr.yml`
 re-runs the same suite on the PR. A setup failure is non-fatal — the change
 still gets made and reviewed, it just arrives unverified.
 
+## CI images
+
+**No job installs tooling at run time.** A job pulls an image that already has
+what it needs; nothing is fetched from a package index while a test waits on
+it. This is what makes a run reproducible: what CI executes is decided by a
+commit here, not by whatever a registry serves that minute.
+
+| piece | role |
+|---|---|
+| `.github/docker/ci.Dockerfile` | the image: Playwright base (pinned by digest) + gh, jq, git, and a PEP 668-safe venv with the solver's numpy/tqdm at exact versions |
+| `.github/workflows/ci-image.yml` | builds it on any branch touching those paths, pushes an immutable `sha-` tag, prints the digest + baked tool versions |
+| `CI_IMAGE` in `.automation.conf` | the digest, for consumers that can read a shell file (`claude.yml`'s implement job, via the `ci-image` job's output) |
+| `container:` in `pr.yml` / `pages.yml` | the same digest, hardcoded — `container.image` is resolved before any step runs, so it cannot source the conf directly |
+
+Notes that are easy to get wrong:
+
+- **Pin by digest, not tag.** Upstream re-pushes version tags for CVE
+  rebuilds, so `:v1.61.1-noble` is not immutable; `@sha256:…` is.
+- **Updating is two commits, always.** A commit that changes the Dockerfile
+  can't reference the digest it produces — that digest doesn't exist until the
+  build has pushed. Push the Dockerfile change, read the digest off the run
+  summary, then repin. This repeats on every image update; it isn't a
+  bootstrap quirk.
+- **`claude.yml` must not name the image.** It is copied verbatim by
+  `export-template.sh`, whose leak check greps the export for the origin
+  owner/repo — a `ghcr.io/OWNER/…` literal there fails the export. Hence the
+  tiny `ci-image` job that reads `.automation.conf` (never exported; only its
+  `.example` is) and passes the value through `needs`.
+- **Scope is jobs that would otherwise install.** `lint-pr-title` (which fires
+  on every PR title edit), `deploy`, `release`, and `close-out` need only
+  bash/git/gh from the runner and install nothing — putting them in a
+  multi-GB image is cost without benefit.
+- **The rule says *unpinned*.** `npm ci` (lockfile-pinned project deps) and
+  `claude-code-action`'s own CLI bootstrap are accepted exceptions. Stating
+  the rule absolutely would be false the day it's written.
+- **Assert tools in the Dockerfile.** Especially `git`: without it
+  `actions/checkout` falls back to a REST tarball that ignores
+  `sparse-checkout`/`filter`, which here means dragging in the 2.5 GiB
+  `math/data` pack and leaving no `.git` for `release.sh`.
+
+Actions are pinned to commit SHAs (with the version in a trailing comment)
+for the same reason: `@v4` is a moving tag, and a retagged action is a
+supply-chain vector, not a hypothetical one.
+
 ## Event-driven triggering
 
 Comments do not trigger anything by themselves in a live Claude Code session —
